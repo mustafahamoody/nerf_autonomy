@@ -148,7 +148,7 @@ def data_setup():
             "--images", images_folder,
             "--run_colmap",
             "--estimate_affine_shape",
-            "hold", "0"
+            "--hold", "0"
         ])
 
         print("Environment Folder Setup Complete \n")
