@@ -1,0 +1,5 @@
+trainer:
+  workspace: "${MODEL_WEIGHTS_PATH}"
+  data_path: "${MODEL_DATA_PATH}"
+  criterion: 10
+  use_checkpoint: "latest_model"

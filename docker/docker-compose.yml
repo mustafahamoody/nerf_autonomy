@@ -1,0 +1,70 @@
+
+services:
+  torch-ngp:
+    build:
+      context: ..
+      dockerfile: docker/torch_ngp.dockerfile
+
+    runtime: nvidia
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all  # Use all available GPUs
+      - DISPLAY=${DISPLAY} # Set the display to the host display
+    
+    # Use a long-running command to keep the container alive
+    command: >
+      /bin/bash -c "
+        echo 'source /opt/conda/etc/profile.d/conda.sh && conda activate torch-ngp' >> ~/.bashrc &&
+        tail -f /dev/null
+      "
+
+    volumes:
+      - ../torch_ngp_container:/app/torch-ngp/
+      - ../data:/app/torch-ngp/data
+      - ../nerf_config:/app/torch-ngp/nerf_config
+
+    network_mode: host
+    
+  
+  ros_packages:
+    build:
+      context: ..
+      dockerfile: docker/nerf_ws.dockerfile
+    runtime: nvidia
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - ROS_DOMAIN_ID=5
+      - DISPLAY=${DISPLAY} # Set the display to the host display
+      - MODEL_WEIGHTS_PATH=/nerf_ws/data/my_scene_nerf_2 # Set the model weights path
+      - MODEL_DATA_PATH=/nerf_ws/data/my_scene_2 # Set the model weights path
+
+    volumes:
+      - ../nerf_ws/src:/nerf_ws/src
+      - ../data:/nerf_ws/data
+      - ../nerf_config:/nerf_ws/nerf_config
+
+    command: >
+      bash -c "
+        # Update entrypoint permissions
+        chmod +x /entrypoint.sh &&
+        
+        # Create better shell configuration
+        echo 'source /entrypoint.sh' >> ~/.bashrc &&
+
+        cd 
+        
+        # Start background services
+        source ~/.bashrc &&
+        ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
+        ros2 run occupancy_package occupancy_node &
+        ros2 run seg_package seg_node &
+        ros2 run costmap_package costmap_node &
+        ros2 run path_planner_package path_planner_node &
+        ros2 run path_planner_package path_planner_service &
+        
+        # Keep container running
+        tail -f /dev/null
+      "
+
+    network_mode: host

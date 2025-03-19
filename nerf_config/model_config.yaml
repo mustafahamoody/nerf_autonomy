@@ -1,0 +1,18 @@
+model:
+  encoding: "hashgrid"
+  bound: 2
+  fp16: True
+  cuda_ray: True
+  density_scale: 1
+  min_near: 0.2
+  density_thresh: 10
+  bg_radius: -1
+
+  # Change according to NeRF env values
+  bound: 2.0 # Default (Axis-ALigned) Bounding Box scale
+  scale: 0.5 # Default scale
+  dt_gamma: 0.0 # Default dt_gamma
+  density_thresh: 10.0 # Default density threshold
+  iters: 40000 # Default number of iterations
+
+

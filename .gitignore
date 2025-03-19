@@ -1,0 +1,7 @@
+/data/
+render_viz/
+/build/
+/install/
+/log/
+__pycache__/
+*.pyc
