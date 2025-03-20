@@ -12,41 +12,7 @@ from nerf_config.libs.nerf.network import NeRFNetwork
 from nerf_config.config.model_options import ModelOptions
 
 
-# # Image Keypoints detector using SIFT
-# def find_keypoints(camera_image, render=False):
-#     image = np.copy(camera_image)
 
-#     if image is None:
-#         print("No Image Recieved")
-#     # else:
-#     #     print(f'-------------------------------{image.shape, image.dtype}-------------------------------')
-
-#     if image.dtype != 'uint8':
-#         # Normalize to [0, 255] and convert to uint8
-#         image = cv2.convertScaleAbs(image, alpha=(255.0 / np.max(image)))
-    
-#     # Convert image to grayscale -- SIFT works best with grayscale images
-#     image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-#     # Use Scale-Invariant Feature Transform (SIFT) to detect keypoints
-#     sift = cv2.SIFT_create()
-#     keypoints = sift.detect(image_gray, None)
-
-#     if render:
-#         # Draw keypoints on image
-#         feature_image = cv2.drawKeypoints(image_gray, keypoints, image)
-#     else:
-#         feature_image = None
-
-#     # Extract (x,y) coords. of keypoints on the image (as a numpy int array)
-#     keypoint_coords = np.array([keypoint.pt for keypoint in keypoints]).astype(int)
-    
-#     # Remove duplicate keypoints
-#     keypoint_coords = np.unique(keypoint_coords, axis=0)
-
-#     extras = {'features': feature_image}
-
-#     return keypoint_coords, extras
 
 # ----------------------------------------------------------------------------------------
 
@@ -238,7 +204,7 @@ class PoseOptimizer():
         # Use Adam optimizer for poses
         optimizer = torch.optim.Adam([pose_params], **self.optimizer_params)
         
-        # More aggressive cyclicallearning rate scheduler to help escape local minima
+        # More aggressive (cyclical learning rate scheduler to help escape local minima
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.learning_rate * 10,  # Much higher peak LR
@@ -459,13 +425,12 @@ class Localize():
             self.config_trainer = load_config(trainer_config_path)
 
         except Exception as e:
-            self.get_logger().error(f"Failed to load configurations: {e}")
-            raise
+            raise e
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-        # Initialize the NeRFNetwork model
+        # Initialize the NeRF model
         self.model = NeRFNetwork(
             encoding=self.config_model['model']['encoding'],
             bound=self.config_model['model']['bound'],
@@ -480,7 +445,7 @@ class Localize():
         self.metrics = [PSNRMeter(),]
         self.criterion = torch.nn.MSELoss(reduction='none')
 
-        # Initialize the Trainer (this loads weights from a checkpoint)
+        # Initialize the Trainer (load weights from a checkpoint)
         self.trainer = Trainer(
             'ngp',
             opt=ModelOptions.opt(),

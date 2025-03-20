@@ -30,6 +30,7 @@ services:
     build:
       context: ..
       dockerfile: docker/nerf_ws.dockerfile
+      
     runtime: nvidia
 
     environment:
