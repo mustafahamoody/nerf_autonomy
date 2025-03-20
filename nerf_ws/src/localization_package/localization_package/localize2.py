@@ -140,7 +140,7 @@ def load_config(file_path):
 
 # Localizer Class with NeRF Model
 class Localizer():
-    def __init__(self):
+    def __init__(self, only_keypoints=False):
 
         # Get config paths from environment variables with error checking
         model_config_path = os.environ.get('MODEL_CONFIG_PATH')
@@ -201,6 +201,9 @@ class Localizer():
         self.image_height = None
         self.image_width = None
 
+        # Focus optimization on only keypoints
+        self.only_keypoints = only_keypoints
+
 
     # Image Keypoints detector using SIFT
     def get_keypoints(self, camera_image, render=False):
@@ -240,7 +243,7 @@ class Localizer():
 
 
     # Render Image from NeRF
-    def nerf_image(self, camera_image, pose_matrix, only_keypoints=False, dilate_iter=2, kernel_size=3, batch_size=2048):
+    def nerf_image(self, camera_image, pose_matrix, dilate_iter=2, kernel_size=3, batch_size=2048):
 
         # Get image dimensions
         self.image_height, self.image_width, _ = camera_image.shape
@@ -248,7 +251,7 @@ class Localizer():
         # Get full image rays
         full_rays = self.get_rays_fn(pose_matrix)
         
-        if only_keypoints:
+        if self.only_keypoints:
         # Focus optimization on only keypoints
 
             keypoints = self.get_keypoints(camera_image, render=False)
@@ -292,9 +295,9 @@ class Localizer():
             output = self.render_fn(full_rays["rays_o"], full_rays["rays_d"])
         
         # Get rendered nerf image
-        rendered_image = output["image"].reshape(self.image_height, self.image_width, 3).cpu().numpy()
+        rendered_image = output["image"].reshape(self.image_height, self.image_width, 3)
 
-        return rendered_image    #.squeeze().cpu().numpy()
+        return rendered_image
 
 
     def localize(self, camera_image, start_pose=[0.1, 0.1, 0.1, 0.05]):
@@ -309,10 +312,10 @@ class Localizer():
         cos_y = torch.cos(yaw)
         sin_y = torch.sin(yaw)
         R = torch.zeros((3, 3), device='cuda')
-        R[0, 0] = cos_y
-        R[0, 1] = -sin_y
+        R[0, 0] = -cos_y
+        R[0, 1] = sin_y
         R[1, 0] = sin_y
-        R[1, 1] = cos_y
+        R[1, 1] = -cos_y
         R[2, 2] = 1.0
         
         # Create translation vector
@@ -329,25 +332,34 @@ class Localizer():
 
         pose_matrix = torch.cat([top_rows, bottom_row], dim=0).unsqueeze(0) # Add batch dim
 
-
         # Render image from NeRF
         nerf_image = self.nerf_image(camera_image, pose_matrix)
 
-        # Convert camera image and nerf image to tensor -----------------------------------------------------------------------------------
+        # return nerf_image.cpu().numpy()
+    
+
+        # Notmalize camera image and conver to tensor
+        H, W, _ = camera_image.shape
+        camera_image = (camera_image / 255).astype(np.float32)
+
+        # if self.only_keypoints:
+        #     # Get camera RGB values at the same pixels - ensure proper shape
+        #     camera_rgb = camera_image_t[0, :, batch_y_t, batch_x_t].permute(1, 0) # Shape: [N, 3]
+        return camera_image
+            
         # camera_image = torch.tensor(camera_image, device='cuda')
-        nerf_image = torch.tensor(nerf_image, dtype=torch.float32, device=self.device)
 
 
-        # Initialize Pose Optimizer
-        pose_optimizer = PoseOptimizer(pose_params, camera_image, nerf_image, max_iters=1000, learning_rate=0.01, render=True)
+        # # Initialize Pose Optimizer
+        # pose_optimizer = PoseOptimizer(pose_params, camera_image, nerf_image, max_iters=1000, learning_rate=0.01, render=True)
         
-        # optimize pose and return optimized pose
-        optimized_pose = pose_optimizer.optimize_pose(add_noise=True)
+        # # optimize pose and return optimized pose
+        # optimized_pose = pose_optimizer.optimize_pose(add_noise=True)
 
-        print('Optimization Complete') 
-        print(f'Optimized pose: x={optimized_pose[0]}, y={optimized_pose[1]}, z={optimized_pose[2]}, yaw={optimized_pose[3]}')
+        # print('Optimization Complete') 
+        # print(f'Optimized pose: x={optimized_pose[0]}, y={optimized_pose[1]}, z={optimized_pose[2]}, yaw={optimized_pose[3]}')
 
-        return optimized_pose
+        # return optimized_pose
 
 
 
@@ -360,7 +372,20 @@ else:
     camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
 
     # try:
-optimized_pose = Localizer().localize(camera_image)
-print(f"Final pose: {optimized_pose}")
+    #     optimized_pose = Localizer().localize(camera_image)
+    #     print(f"Final pose: {optimized_pose}")
     # except Exception as e:
-        # print(f"Error during localization: {e}")
+    #     print(f"Error during localization: {e}")
+
+    nerf_image = Localizer().localize(camera_image, start_pose=[0.02, 0.04, 0.01, 0.05])  # ROTATION with single vlaue MAY BE CAUSING ISSUES
+
+    # Plot image to file
+    plt.imshow(nerf_image)
+    plt.title(f"nerf render")
+    render_dir = os.path.join(os.getcwd(), "nerf_renders")
+    os.makedirs(render_dir, exist_ok=True)
+    viz_path = os.path.join(render_dir, 'test_render')
+    plt.savefig(viz_path)
+    print(f"Visualization saved to {viz_path}")
+    plt.close()
+
