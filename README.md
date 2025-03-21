@@ -5,7 +5,8 @@ Use ***torch-ngp-container*** to transform captured photos or a video of an envi
 Then, use ***nerf_ws*** to set up collision-free path planning and controls using ROS2 for real-time autonomous navigation in the environment, with your robot.
 
 ## Setup
-This section covers how to install and set up nerf_autonomy -- To create and configure use your own environment, please refer to *create-your-environment.md*
+This section covers how to install and set up nerf_autonomy 
+-- To creating your own NeRF, and configure the ROS2 Nodes on it, please refer to the *help* folder
 
 #### Requirements:
 - System with an NVIDIA GPU (CUDA Capable System)
