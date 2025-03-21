@@ -21,20 +21,22 @@ $ cd nerf_autonomy
 ```
 
 Build and run the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
-*Please note this process may take a while (15 - 30 mins +) depending on your system* 
+*This process may take a while (15 - 30 mins +) depending on your system* 
 ```
 nerf_autonomy$ cd docker
-nerf_autonomy/docker$ docker compose up -d
+nerf_autonomy/docker$ docker compose up -d # This will build and start both containers
 ```
 
-*Note for Linux Systems*: If you get a permission denied error, you may need to add your user to the docker group to have access to the docker daemon 
+*Note for Linux Systems*: If you recieve a permission denied error, you may need to add your user to the docker group to access the docker daemon. 
+-- For more information see [this](https://docs.docker.com/engine/install/linux-postinstall/)
 ```
 $ sudo groupadd docker
 $ sudo usermod -aG docker $USER
-# Log out and log back in for changes to take effect.
+# Log out and log back in for changes to take effect, then run docker compose up -d again
 ```
 
 Enter the running container:
+```
 docker compose exec torch-ngp-container bash  # For environment creation with torch-ngp
-docker compose exec nerf_ws bash  # To run ROS2 robot navigation systems with torch-ngp
+docker compose exec nerf_ws bash  # To run ROS2 robot navigation nodes with nerf_ws
 ```
