@@ -107,3 +107,5 @@ Run the nerf_autonomy demo and ensure everything is working
 3. Open the WebSocket connection in Foxglove in your browser.
 
 You should see a 2D occupancy grid with a path populated in the 3D viewport.
+
+You just created an autonomous path on a real-life environment using nerf_autonomy!
