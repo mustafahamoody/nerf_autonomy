@@ -12,7 +12,7 @@ This section covers how to install and set up nerf_autonomy
 - System with an NVIDIA GPU (CUDA Capable System)
 - At Least 80 GB of free space (For Docker Containers and Data)
 - Install and setup [Docker](https://www.docker.com/) 
-- Add Nvidia Docker for containers to have access to the GPU
+- Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) for containers to have access to GPU
 
 
 Begin by cloning this repository
