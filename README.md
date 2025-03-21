@@ -42,6 +42,6 @@ Enter the running container:
 nerf_autonomy/docker$ docker compose exec torch-ngp-container bash
 ```
 ```
-# To enter nerf_ws: Run ROS2 navigation nodes
-docker compose exec nerf_ws bash 
+# To enter nerf_ws: For starting ROS2 navigation nodes
+nerf_autonomy/docker$ docker compose exec nerf_ws bash 
 ```
