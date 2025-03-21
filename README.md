@@ -33,7 +33,7 @@ nerf_autonomy/docker$ docker compose up -d # This will build and start both cont
 ```
 $ sudo groupadd docker
 $ sudo usermod -aG docker $USER
-# Log out and log back in for changes to take effect, then run docker compose up -d again
+# Restart your system for changes to take effect. Then run docker compose up -d again
 ```
 
 Enter the running container:
