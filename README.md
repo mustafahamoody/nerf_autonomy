@@ -1,2 +1,40 @@
 # nerf_autonomy
-Complete Repo for Autonomous Robot Navigation using NeRF. Go from Photos or a Video of an Environment to Full Robot Controls
+The Complete Repository for Autonomous Robot Navigation using Neural Radiance Fields (NeRFs). With quick and easy setup using Docker. 
+
+Use ***torch-ngp-container*** to transform captured photos or a video of an environment into an accurately scaled digital model. \
+Then, use ***nerf_ws*** to set up collision-free path planning and controls using ROS2 for real-time autonomous navigation in the environment, with your robot.
+
+## Setup
+This section covers how to install and set up nerf_autonomy -- To create and configure use your own environment, please refer to *create-your-environment.md*
+
+#### Requirements:
+- System with an NVIDIA GPU (CUDA Capable System)
+- At Least 80 GB of free space (For Docker Containers and Data)
+- Have [Docker](https://www.docker.com/) setup and Installed
+- Add Nvidia Docker for containers to have access to the GPU
+
+
+Begin by cloning this repository
+```
+$ git clone https://github.com/mustafahamoody/nerf_autonomy
+$ cd nerf_autonomy
+```
+
+Build and run the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
+*Please note this process may take a while (15 - 30 mins +) depending on your system* 
+```
+nerf_autonomy$ cd docker
+nerf_autonomy/docker$ docker compose up -d
+```
+
+*Note for Linux Systems*: If you get a permission denied error, you may need to add your user to the docker group to have access to the docker daemon 
+```
+$ sudo groupadd docker
+$ sudo usermod -aG docker $USER
+# Log out and log back in for changes to take effect.
+```
+
+Enter the running container:
+docker compose exec torch-ngp-container bash  # For environment creation with torch-ngp
+docker compose exec nerf_ws bash  # To run ROS2 robot navigation systems with torch-ngp
+```
