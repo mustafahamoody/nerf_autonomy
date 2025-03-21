@@ -38,6 +38,8 @@ $ sudo usermod -aG docker $USER
 
 Enter the running container:
 ```
-docker compose exec torch-ngp-container bash  # For environment creation with torch-ngp
-docker compose exec nerf_ws bash  # To run ROS2 robot navigation nodes with nerf_ws
+# To enter torch-ngp-container: For environment creation
+docker compose exec torch-ngp-container bash
+# To enter nerf_ws: Run ROS2 navigation nodes
+docker compose exec nerf_ws bash 
 ```
