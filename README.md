@@ -22,14 +22,14 @@ $ git clone https://github.com/mustafahamoody/nerf_autonomy
 $ cd nerf_autonomy
 ```
 
-Build and run the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
+Build and Start the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
 *This process may take a while depending on your system (15 - 30 mins +) * 
 ```
 nerf_autonomy$ cd docker
 nerf_autonomy/docker$ docker compose up -d # This will build and start both containers
 ```
 
-*Note for Linux Systems*: If you recieve a permission denied error, you may need to add your user to the docker group to access the docker daemon. 
+*Note for Linux Systems*: If you receive a permission denied error, you may need to add your user to the docker group to access the docker daemon. 
 -- For more information see [this](https://docs.docker.com/engine/install/linux-postinstall/)
 ```
 $ sudo groupadd docker
@@ -77,4 +77,33 @@ sudo apt install ros-humble-foxglove-bridge
 
 
 ## Demo
-To demo nerf_autonomy and ensure everything is working 
+Run the nerf_autonomy demo and ensure everything is working
+
+### Create the Nerf Environment
+1. Download the demo dataset from [here](https://drive.google.com/drive/u/0/folders/1udf2hW8DDVJUtr4nBpLCm9fHsHjxdwG5)
+2. Give your user access to the data folder
+  ```
+  nerf_autonomy$ sudo chown -R $UID $GID data
+  ```
+4. Move it into nerf_autonomy/data
+5. Open env_create.py (in the torch-ngp-container folder) and make sure that under **DATA SETUP, content_path = "data/demo"** and **input_type = "image"**
+6. Start the containers and enter torch-ngp-container
+7. To create the demo NeRF Environment run:
+8. ```
+   python env-create.py
+   ```
+   and name the environment "demo" 
+   
+   This may take 1+ hours. **Exiting the container will not stop this process. The container will stay running until you stop it or turn off your machine.**
+9. To view the environment NeRF once env_create finishes run:
+   ```
+   python env_create.py -- view
+   ```
+   and enter your environment name (demo)
+
+### Run the autonomous path planning
+1. In the docker compose file, under **nerf_ws environment**, make sure **MODEL_WEIGHTS_PATH=/nerf_ws/data/demo_nerf** and **MODEL_DATA_PATH=/nerf_ws/data/demo**
+2. Start the container
+3. Open the WebSocket connection in Foxglove in your browser.
+
+You should see a 2D occupancy grid with a path populated in the 3D viewport.
