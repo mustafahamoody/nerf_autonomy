@@ -23,7 +23,7 @@ $ cd nerf_autonomy
 ```
 
 Build and Start the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
-*This process may take a while depending on your system (15 - 30 mins +) * 
+*This process may take a while depending on your system (15 - 30 mins +)* 
 ```
 nerf_autonomy$ cd docker
 nerf_autonomy/docker$ docker compose up -d # This will build and start both containers
