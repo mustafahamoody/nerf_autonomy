@@ -39,7 +39,9 @@ $ sudo usermod -aG docker $USER
 Enter the running container:
 ```
 # To enter torch-ngp-container: For environment creation
-docker compose exec torch-ngp-container bash
+nerf_autonomy/docker$ docker compose exec torch-ngp-container bash
+```
+```
 # To enter nerf_ws: Run ROS2 navigation nodes
 docker compose exec nerf_ws bash 
 ```
