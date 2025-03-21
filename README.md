@@ -108,4 +108,65 @@ Run the nerf_autonomy demo and ensure everything is working
 
 You should see a 2D occupancy grid with a path populated in the 3D viewport.
 
-You just created an autonomous path on a real-life environment using nerf_autonomy!
+You just created an autonomous path for a real-life environment using nerf_autonomy!
+
+## Citations
+If you use this work, please include the following citations
+
+nerf_autonomy:
+```
+@misc{nerf_autonomy,
+    Authors = {Mustafa Hamoody, Kishore Yogaraj},
+    Year = {2025},
+    Note = {https://github.com/mustafahamoody/nerf_autonomy},
+    Title = {nerf_autonomy: Autonomous Robot Navigation Using Neural Radiance Fields}
+```
+
+nerf-navigation:
+```
+@article{nerf-nav,
+  author={Adamkiewicz, Michal and Chen, Timothy and Caccavale, Adam and Gardner, Rachel and Culbertson, Preston and Bohg, Jeannette and Schwager, Mac},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={Vision-Only Robot Navigation in a Neural Radiance World}, 
+  year={2022},
+  volume={7},
+  number={2},
+  pages={4606-4613},
+  doi={10.1109/LRA.2022.3150497}}
+```
+
+torch-ngp:
+```
+@misc{torch-ngp,
+    Author = {Jiaxiang Tang},
+    Year = {2022},
+    Note = {https://github.com/ashawkey/torch-ngp},
+    Title = {Torch-ngp: a PyTorch implementation of instant-ngp}
+}
+```
+
+
+Instant-NGP:
+```
+@article{mueller2022instant,
+    title = {Instant Neural Graphics Primitives with a Multiresolution Hash Encoding},
+    author = {Thomas M\"uller and Alex Evans and Christoph Schied and Alexander Keller},
+    journal = {arXiv:2201.05989},
+    year = {2022},
+    month = jan
+}
+```
+
+original NeRF authors:
+```
+@misc{mildenhall2020nerf,
+    title={NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis},
+    author={Ben Mildenhall and Pratul P. Srinivasan and Matthew Tancik and Jonathan T. Barron and Ravi Ramamoorthi and Ren Ng},
+    year={2020},
+    eprint={2003.08934},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
+}
+```
+
+
