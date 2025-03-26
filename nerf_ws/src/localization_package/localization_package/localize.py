@@ -482,7 +482,7 @@ class Localize():
       
 ################## TEST ##################
 # Load your sensor image (ensure it is in RGB).
-camera_image = cv2.imread("10.png")
+camera_image = cv2.imread("1.png")
 camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
 camera_image = np.flipud(camera_image)  # Flip image vertically
 

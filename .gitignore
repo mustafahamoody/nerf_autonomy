@@ -1,5 +1,6 @@
 /data/
 render_viz/
+nerf_renders/
 /build/
 /install/
 /log/

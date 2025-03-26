@@ -4,6 +4,21 @@ import shutil
 import argparse
 import yaml
 
+# --------------DATA SETUP-------------
+input_type = "image"
+
+content_path = "data/training_env"
+
+video_fps = "10" # Frame extraction (per second) for video
+
+# --------------ENVIRONMENT SCALING------------
+# point1 = [0.3, 0.0, 0.0] # x, y, z coordinates of the first point
+# point2 = [0.7, 0.0, 0.0] # x, y, z coordinates of the second point
+real_world_distance = 5 # Real-world distance between the two points 
+
+# ------------------------------------------
+
+
 # Load configurations from YAML file
 def load_config(file_path):
     """Load YAML configuration file with environment variable expansion."""
@@ -48,20 +63,6 @@ scale = str(config_model['model']['scale']) # Default scale
 dt_gamma = str(config_model['model']['dt_gamma']) # Default dt_gamma
 density_thresh = str(config_model['model']['density_thresh']) # Default density threshold
 iters = str(config_model['model']['iters']) # Default number of iterations
-
-# --------------DATA SETUP-------------
-input_type = "image"
-
-content_path = "data/my_scene_2"
-
-video_fps = "10" # Frame extraction (per second) for video
-
-# --------------ENVIRONMENT SCALING------------
-# point1 = [0.3, 0.0, 0.0] # x, y, z coordinates of the first point
-# point2 = [0.7, 0.0, 0.0] # x, y, z coordinates of the second point
-real_world_distance = 5 # Real-world distance between the two points 
-
-# ------------------------------------------
 
 
 parser = argparse.ArgumentParser(description="Skip environment setup and directly generate NeRF model of the environment-- Used to adjust parameter when data is already setup")
