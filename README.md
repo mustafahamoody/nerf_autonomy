@@ -159,7 +159,7 @@ Instant-NGP:
 
 original NeRF authors:
 ```
-@misc{mildenhall2020nerf,
+@article{mildenhall2020nerf,
     title={NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis},
     author={Ben Mildenhall and Pratul P. Srinivasan and Matthew Tancik and Jonathan T. Barron and Ravi Ramamoorthi and Ren Ng},
     year={2020},
