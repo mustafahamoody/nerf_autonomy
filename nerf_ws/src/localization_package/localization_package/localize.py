@@ -12,8 +12,6 @@ from nerf_config.libs.nerf.network import NeRFNetwork
 from nerf_config.config.model_options import ModelOptions
 
 
-
-
 # ----------------------------------------------------------------------------------------
 
 def find_keypoints(camera_image, max_keypoints=10000, render=False):
@@ -52,97 +50,6 @@ def find_keypoints(camera_image, max_keypoints=10000, render=False):
     }
     
     return keypoint_coords, extras
-
-
-# def find_keypoints_superpoint(camera_image, max_keypoints=1000, render=False):
-#     # Extract keypoints using SuperPoint.
-#     image = np.copy(camera_image)
-
-#     # Make sure image is correct datatype for processing
-#     if image.dtype != 'uint8':
-#         image = cv2.convertScaleAbs(image, alpha=(255.0 / np.max(image)))
-
-#     # Convert image to grayscale, normalize and conver to tensor
-#     image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-#     image_tensor = torch.from_numpy(image_gray).float() / 255.0
-#     image_tensor = image_tensor.unsqueeze(0).unsqueeze(0).to('cuda')
-
-#     # Load SuperPoint model
-#     superpoint = SuperPoint({
-#         'descriptor_dim': 256,
-#         'nms_radius': 4,
-#         'keypoint_threshold': 0.005,
-#         'max_keypoints': max_keypoints
-#     }).to('cuda')
-
-#     # Extract Keypoints
-#     with torch.no_grad():
-#         pred = superpoint({'image': image_tensor})
-
-#     # convert to numpy
-#     keypoints = pred['keypoints'][0].cpu().numpy()
-#     scores = pred['scores'][0].cpu().numpy()
-#     discriptors = pred['descriptors'][0].cpu().numpy()
-
-#     # Sort by score and keep top max_keypoints
-#     indices = np.argsort(scores)[::-1][:max_keypoints]
-#     keypoints = keypoints[indices]
-#     descriptors = descriptors[:, indices]
-
-#     if render:
-#         # Draw keypoints on image
-#         feature_image = np.copy(image)
-#         for kp in keypoints:
-#             cv2.circle(feature_image, (int(kp[0]), int(kp[1])), 3, (0, 255, 0), -1)
-#     else:
-#         feature_image = None
-    
-#     # Convert to integers
-#     keypoint_coords = keypoints.astype(int)
-    
-#     extras = {
-#         'features': feature_image,
-#         'descriptors': descriptors
-#     }
-    
-#     return keypoint_coords, extras
-
-
-# def find_keypoints(camera_image, max_keypoints=1000, render=False):
-#     # Extract keypoints using both ORB and SuperPoint.
-
-#     # Get ORB keypoints
-#     orb_keypoints, orb_extras = find_keypoints_orb(camera_image, max_keypoints=max_keypoints, render=False) 
-    
-#     # Try to get SuperPoint keypoints
-#     try:
-#         sp_keypoints, sp_extras = find_keypoints_superpoint(camera_image, max_keypoints=max_keypoints, render=render)
-#         if sp_keypoints is not None:
-#             # Combine keypoints
-#             keypoints = np.vstack([orb_keypoints, sp_keypoints])
-
-#             # remove duplicates
-#             keypoints = np.unique(keypoints, axis=0)
-#         else:
-#             keypoints = orb_keypoints
-    
-#     except:
-#         print("SuperPoint unavailable: Using only ORB features")
-#         keypoints = orb_keypoints
-
-#     if render:
-#         # Draw keypoints on image
-#         feature_image = np.copy(camera_image)
-#         for kp in keypoints:
-#             cv2.circle(feature_image, (int(kp[0]), int(kp[1])), 3, (0, 255, 0), -1)
-#     else:
-#         feature_image = None
-    
-#     extras = {'features': feature_image}
-    
-#     return keypoints, extras
-
-
 
 
 # Pose Coordinate Optimizer using NeRF
@@ -254,18 +161,17 @@ class PoseOptimizer():
             bottom_row = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device='cuda')
             pose_matrix = torch.cat([top_rows, bottom_row], dim=0).unsqueeze(0) # Add batch dim
 
-
-            # Get rays for entire image
-            rays = self.get_rays(pose_matrix)
-            rays_o = rays["rays_o"].reshape(H, W, 3)
-            rays_d = rays["rays_d"].reshape(H, W, 3)
-
             # Sample batch from interest region
             if interest_idxs.shape[0] <= self.batch_size:
                 batch_idxs = interest_idxs
             else:
                 idx = np.random.choice(interest_idxs.shape[0], self.batch_size, replace=False)
                 batch_idxs = interest_idxs[idx]
+
+            # Get rays for entire image
+            rays = self.get_rays(pose_matrix)
+            rays_o = rays["rays_o"].reshape(H, W, 3)
+            rays_d = rays["rays_d"].reshape(H, W, 3)
 
             batch_y, batch_x = batch_idxs[:, 0], batch_idxs[:, 1]
             batch_y_t = torch.tensor(batch_y, dtype=torch.long, device='cuda')
@@ -327,14 +233,14 @@ class PoseOptimizer():
             losses.append(loss.item())
 
             # Print Progress
-            if iter <= 3 or iter % 100 == 0:
+            if iter:
                 print(f"--------------------------Iteration {iter}, Loss: {loss.item()}--------------------------")
                 print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
-                # print(f"Current params: {pose_params.data}")
+                print(f"Current params: {pose_params.data}")
                 # print(f"Gradients: {pose_params.grad}")
 
 
-            if self.render_viz and (iter == 1 or iter % 100 == 0):
+            if self.render_viz:
                 # Render full image and save to render_viz folder for visualization
                 with torch.no_grad():
                     full_rays = self.get_rays(pose_matrix)
@@ -429,7 +335,6 @@ class Localize():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
         # Initialize the NeRF model
         self.model = NeRFNetwork(
             encoding=self.config_model['model']['encoding'],
@@ -484,6 +389,5 @@ class Localize():
 # Load your sensor image (ensure it is in RGB).
 camera_image = cv2.imread("1.png")
 camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
-camera_image = np.flipud(camera_image)  # Flip image vertically
 
 Localize().run(camera_image)

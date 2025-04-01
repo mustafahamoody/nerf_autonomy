@@ -11,6 +11,9 @@ from nerf_config.libs.nerf.provider import NeRFDataset
 from nerf_config.libs.nerf.network import NeRFNetwork
 from nerf_config.config.model_options import ModelOptions
 
+from torchviz import make_dot
+
+
 
 class PoseOptimizer():
     def __init__(self, nerf_renderer, camera_image, camera_image_t, pose_params, pose_matrix, max_iters=1000, learning_rate=0.01, render=False, stream=False):
@@ -28,15 +31,12 @@ class PoseOptimizer():
     # Estimate Pose by optimizing pixel values between camera image and rendered nerf image
     # Returns: (x, y, z) translation tuple, yaw (radians)
     def optimize_pose(self, add_noise=True):
-        # Keep track of the best pose and lowest loss
-        best_pose_params = self.pose_params.clone()
-        lowest_loss = float('inf')
 
         # Initialize optimizer
-        optimizer = torch.optim.SGD([self.pose_params], lr=self.learning_rate, weight_decay=1e-5) # Use Classic gradient descent with L2 Regularization (weight decay)
+        optimizer = torch.optim.SGD([self.pose_params], lr=self.learning_rate, weight_decay=1e-3) # Use Classic gradient descent with L2 Regularization (weight decay)
 
         # Add (cyclical) learning rate scheduler to help escape local minima
-        scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=self.learning_rate, max_lr=self.learning_rate * 5, step_size_up=100, step_size_down=100)
+        # scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=self.learning_rate, max_lr=self.learning_rate * 5, step_size_up=100, step_size_down=100)
 
         if self.render:
             # Create nerf_renders directory to store NeRF Renders
@@ -44,55 +44,25 @@ class PoseOptimizer():
             os.makedirs(render_dir, exist_ok=True)
 
         iter = 0
-        # consecutive_worse_iterations = 0
-        # max_consecutive_worse = 50  # Stop if loss doesn't improve for many iterations
-
-
         # Optimization loop -- Keep optimizing until loss is below threshold or max iterations reached
         while self.loss_value > 0.0001:
             iter += 1
 
-            if iter >= self.max_iters:
+            if iter > self.max_iters:
                 print("Max iterations Reached")
                 break
 
-            # Update Pose Matrix
-            x, y, z, pitch, yaw, roll = self.pose_params[0], self.pose_params[1], self.pose_params[2], \
-                                    self.pose_params[3], self.pose_params[4], self.pose_params[5]
-            
-            self.pose_matrix[0, 0:3, 3] = torch.tensor([x, y, z], device='cuda')
-
-            # Update Rotation Matrix elements
-            cos_x, sin_x = torch.cos(pitch), torch.sin(pitch)
-            cos_y, sin_y = torch.cos(yaw), torch.sin(yaw)
-            cos_z, sin_z = torch.cos(roll), torch.sin(roll)
-
-            # Rotation matrices
-            Rx = torch.tensor([
-                [1, 0, 0],
-                [0, cos_x, -sin_x],
-                [0, sin_x, cos_x]
-            ], device='cuda', dtype=torch.float32)
-
-            Ry = torch.tensor([
-                [-cos_y, 0, sin_y],
-                [0, -1, 0],
-                [-sin_y, 0, cos_y]
-            ], device='cuda', dtype=torch.float32)
-
-            Rz = torch.tensor([
-                [cos_z, -sin_z, 0],
-                [sin_z, cos_z, 0],
-                [0, 0, 1]
-            ], device='cuda', dtype=torch.float32)
-
-            # Combined rotation matrix
-            R = torch.mm(torch.mm(Rz, Ry), Rx)
-            
-            # Update pose matrix with homogeneous row
-            self.pose_matrix[0, :3, :3] = R
-            self.pose_matrix[0, :3, 3] = torch.tensor([x, y, z], device='cuda')
-
+            # # Update Pose Matrix
+            # if iter != 1:
+            #     x, y, z, yaw = self.pose_params[0], self.pose_params[1], self.pose_params[2], self.pose_params[3]
+            #     self.pose_matrix[0, 0:3, 3] = torch.tensor([x, y, z], device='cuda')
+            #     # Update Rotation Matrix elements
+            #     cos_y = torch.cos(yaw)
+            #     sin_y = torch.sin(yaw)
+            #     self.pose_matrix[0, 0, 0] = cos_y
+            #     self.pose_matrix[0, 0, 1] = -sin_y
+            #     self.pose_matrix[0, 1, 0] = sin_y
+            #     self.pose_matrix[0, 1, 1] = cos_y
 
             # Render image from NeRF
             nerf_image = self.nerf_renderer(self.camera_image_t, self.pose_matrix)
@@ -133,7 +103,7 @@ class PoseOptimizer():
             loss.backward()
 
             optimizer.step()
-            scheduler.step()
+            # scheduler.step()
 
             # Update loss value
             self.loss_value = loss.item()
@@ -141,7 +111,7 @@ class PoseOptimizer():
             # Print Progress
             if iter <= 1000 or iter % 100 == 0:
                 print(f"--------------------------Iteration {iter}, Loss: {self.loss_value}--------------------------")
-                print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
+                # print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
                 print(f"Current pose: {self.pose_params.data}")
                 # print(f"Gradients: {pose_params.grad}")
 
@@ -171,6 +141,14 @@ class PoseOptimizer():
 
                 print(f"Visualization saved to {viz_path}")
                 plt.close()
+
+            break
+        print(self.pose_params.grad)
+        params = {name: param for name, param in locals().items() if isinstance(param, torch.Tensor) and param.requires_grad}
+        make_dot(self.pose_params, params=params).render("autograd_graph", format="png",)
+
+
+
 
         # Return optimized pose parameters
         return self.pose_params.detach().cpu().numpy()
@@ -207,7 +185,7 @@ def load_config(file_path):
 
 # Localizer Class with NeRF Model
 class Localizer():
-    def __init__(self, only_keypoints=False):
+    def __init__(self):
 
         # Get config paths from environment variables with error checking
         model_config_path = os.environ.get('MODEL_CONFIG_PATH')
@@ -267,9 +245,6 @@ class Localizer():
         # Set image features
         self.image_height = None
         self.image_width = None
-
-        # Focus optimization on only keypoints
-        self.only_keypoints = only_keypoints
         self.batch_y_t = None
         self.batch_x_t = None
 
@@ -283,9 +258,9 @@ class Localizer():
         # else:
         #     print(f'-------------------------------{image.shape, image.dtype}-------------------------------')
 
-        if image.dtype != 'uint8':
-            # Normalize to [0, 255] and convert to uint8
-            image = cv2.convertScaleAbs(image, alpha=(255.0 / np.max(image)))
+        # if image.dtype != 'uint8':
+        #     # Normalize to [0, 255] and convert to uint8
+        #     image = cv2.convertScaleAbs(image, alpha=(255.0 / np.max(image)))
         
         # Convert image to grayscale -- SIFT works best with grayscale images
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -312,119 +287,100 @@ class Localizer():
 
 
     # Render Image from NeRF
-    def nerf_image(self, camera_image, pose_matrix, dilate_iter=2, kernel_size=3, batch_size=2048):
+    def nerf_image(self, camera_image, pose_matrix, dilate_iter=3, kernel_size=3, batch_size=2048):
 
         # Get image dimensions
         self.image_height, self.image_width, _ = camera_image.shape
 
+        # Focus optimization on only keypoints
+        keypoints = self.get_keypoints(camera_image, render=True)
+
+        if keypoints.shape[0] == 0:
+            print("No Features Found in Image")
+            return None
+        
+        # create meshgrid with observed image dimensions
+        coords = np.asarray(np.stack(np.meshgrid(np.linspace(0, self.image_height - 1, self.image_height), np.linspace(0, self.image_width - 1, self.image_width)), -1), dtype=int)
+
+        # Create sampling mask for interest region (sampling strategy) from keypoints and dilate it
+        interest_regions = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+        interest_regions[keypoints[:, 1], keypoints[:, 0]] = 1 
+        
+        interest_regions = cv2.dilate(interest_regions, np.ones((kernel_size, kernel_size), np.uint8), iterations=dilate_iter)
+        interest_regions = np.array(interest_regions, dtype=bool)
+        interest_idxs = coords[interest_regions]
+
+        # Sample batch from interest region
+        if interest_idxs.shape[0] <= batch_size:
+            batch_idxs = interest_idxs
+        else:
+            idx = np.random.choice(interest_regions.shape[0], batch_size, replace=False)
+            batch_idxs = interest_idxs[idx]
+
+
         # Get full image rays
         full_rays = self.get_rays_fn(pose_matrix)
-        
-        if self.only_keypoints:
-        # Focus optimization on only keypoints
+        rays_o = full_rays["rays_o"].reshape(self.image_height, self.image_width, 3)
+        rays_d = full_rays["rays_d"].reshape(self.image_height, self.image_width, 3)
 
-            keypoints = self.get_keypoints(camera_image, render=False)
 
-            if keypoints.shape[0] == 0:
-                print("No Features Found in Image")
-                return None
-        
-            # Create mask from keypoints and dilate it
-            interest_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
-            interest_mask[keypoints[:, 1], keypoints[:, 0]] = 1 
-            
-            interest_mask = cv2.dilate(interest_mask, np.ones((kernel_size, kernel_size), np.uint8),
-                                        iterations=dilate_iter)
-            interest_idxs = np.argwhere(interest_mask > 0)
+        batch_y, batch_x = batch_idxs[:, 0], batch_idxs[:, 1]
+        self.batch_y_t = torch.tensor(batch_y, dtype=torch.long, device='cuda')
+        self.batch_x_t = torch.tensor(batch_x, dtype=torch.long, device='cuda')
 
-            # Sample batch from whole interest region (if less than batch size)
-            if interest_idxs.shape[0] <= batch_size:
-                batch_idxs = interest_idxs
-            else:
-                # Randomly sample parts from interest region, until batch size is reached
-                idx = np.random.choice(interest_idxs.shape[0], batch_size, replace=False)
-                batch_idxs = interest_idxs[idx]
+        # Get rays for the sampled batch
+        rays_o_batch = rays_o[self.batch_y_t, self.batch_x_t].unsqueeze(0)
+        rays_d_batch = rays_d[self.batch_y_t, self.batch_x_t].unsqueeze(0)
 
-            batch_y, batch_x = batch_idxs[:, 0], batch_idxs[:, 1]
-            batch_y_t = torch.tensor(batch_y, dtype=torch.long, device='cuda')
-            batch_x_t = torch.tensor(batch_x, dtype=torch.long, device='cuda')
-            self.batch_y_t = batch_y_t
-            self.batch_x_t = batch_x_t
-
-            rays_o = full_rays["rays_o"].reshape(self.image_height, self.image_width, 3)
-            rays_d = full_rays["rays_d"].reshape(self.image_height, self.image_width, 3)
-
-            # Get rays for the sampled batch
-            rays_o_batch = rays_o[batch_y_t, batch_x_t].unsqueeze(0)
-            rays_d_batch = rays_d[batch_y_t, batch_x_t].unsqueeze(0)
-
-            # Render the image from the current pose
-            output = self.render_fn(rays_o_batch, rays_d_batch)
-
-        else:
-            # Use full image for optimization
-            output = self.render_fn(full_rays["rays_o"], full_rays["rays_d"])
-        
-        # Get rendered nerf image
-        rendered_image = output["image"].reshape(self.image_height, self.image_width, 3)
+        # Render the image from the current pose
+        output = self.render_fn(rays_o_batch, rays_d_batch)
+        rendered_image = output["image"].reshape(-1, 3)
 
         return rendered_image
 
 
-    def localize(self, camera_image, start_pose=[0.02, 0.04, 0.01, 0.1, 0.05, 0.02]):
+    def localize(self, camera_image, start_pose=[0.05, 0.08, 0.01, 0.01]):
         # Build tracked parametres tensor
         pose_params = torch.tensor(start_pose, requires_grad=True, device='cuda')
 
         # Create pose matrix to render image from NeRF
         # Extract Parameters
-        x, y, z, pitch, yaw, roll = pose_params[0], pose_params[1], pose_params[2], pose_params[3], pose_params[4], pose_params[5]
+        x, y, z, yaw = pose_params[0], pose_params[1], pose_params[2], pose_params[3]
 
-        # Create rotation matrices
-        cos_x, sin_x = torch.cos(pitch), torch.sin(pitch)
-        cos_y, sin_y = torch.cos(yaw), torch.sin(yaw)
-        cos_z, sin_z = torch.cos(roll), torch.sin(roll)
-
-        # Rotation matrices
-        Rx = torch.tensor([
-            [1, 0, 0],
-            [0, cos_x, -sin_x],
-            [0, sin_x, cos_x]
-        ], device='cuda', dtype=torch.float32)
-
-        Ry = torch.tensor([
-            [-cos_y, 0, sin_y],
-            [0, -1, 0],
-            [-sin_y, 0, cos_y]
-        ], device='cuda', dtype=torch.float32)
-
-        Rz = torch.tensor([
-            [cos_z, -sin_z, 0],
-            [sin_z, cos_z, 0],
-            [0, 0, 1]
-        ], device='cuda', dtype=torch.float32)
-
-        # Combined rotation matrix
-        R = torch.mm(torch.mm(Rz, Ry), Rx)
+        # Create rotation matrix for yaw
+        cos_y = torch.cos(yaw)
+        sin_y = torch.sin(yaw)
+        R = torch.zeros((3, 3), device='cuda')
+        R[0, 0] = cos_y
+        R[0, 1] = -sin_y
+        R[1, 0] = sin_y
+        R[1, 1] = cos_y
+        R[2, 2] = 1.0
         
-        # Create pose matrix with homogeneous row
-        pose_matrix = torch.zeros((4, 4), device='cuda', dtype=torch.float32)
-        pose_matrix[:3, :3] = R
-        pose_matrix[:3, 3] = torch.tensor([x, y, z], device='cuda')
-        pose_matrix[3, 3] = 1.0  # Homogeneous row
+        # Create translation vector
+        t = torch.zeros((3, 1), device='cuda')
+        t[0, 0] = x
+        t[1, 0] = y
+        t[2, 0] = z
 
-        # Add batch dimension
-        pose_matrix = pose_matrix.unsqueeze(0)
+        # Build pose matrix top 3x4 part
+        top_rows = torch.cat([R, t], dim=1)
+
+        # Add homogeneous row
+        bottom_row = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device='cuda')
+
+        # concatinate into pose matrix, add batch dim
+        pose_matrix = torch.cat([top_rows, bottom_row], dim=0).unsqueeze(0) 
+
 
         # Notmalize camera image and conver to tensor
-        camera_image = (camera_image / 255).astype(np.float32)
+        camera_image = (np.array(camera_image) / 255.).astype(np.float32)
         camera_image_t = torch.tensor(camera_image, device='cuda')
 
-        if self.only_keypoints:
-            # Get camera RGB values at the same pixels for optimization using only keypoints -- ensure proper shape
-            camera_image_t = camera_image_t[0, :, self.batch_y_t, self.batch_x_t].permute(1, 0) # Shape: [N, 3]
+        # Get camera RGB values at the same pixels for optimization using only keypoints -- ensure proper shape
+        camera_image_t = camera_image_t[0, :, self.batch_y_t, self.batch_x_t].permute(1, 0) # Shape: [N, 3]
 
     
-
         # Initialize Pose Optimizer
         pose_optimizer = PoseOptimizer(
             nerf_renderer=self.nerf_image,
@@ -456,20 +412,20 @@ if camera_image is None:
 else:
     camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
 
-    # nerf_image = Localizer().localize(camera_image, start_pose=[0.02, 0.04, 0.01, 0.05])  # ROTATION with single value MAY BE CAUSING ISSUES
+    nerf_image = Localizer().localize(camera_image, start_pose=[0.5,  0.1, -0.5, 0])  # ROTATION with single value MAY BE CAUSING ISSUES
 
-    # # Plot image to file
-    # plt.imshow(nerf_image)
-    # plt.title(f"nerf render")
-    # render_dir = os.path.join(os.getcwd(), "nerf_renders")
-    # os.makedirs(render_dir, exist_ok=True)
-    # viz_path = os.path.join(render_dir, 'test_render')
-    # plt.savefig(viz_path)
-    # print(f"Visualization saved to {viz_path}")
-    # plt.close()
+    # Plot image to file
+    plt.imshow(nerf_image)
+    plt.title(f"nerf render")
+    render_dir = os.path.join(os.getcwd(), "nerf_renders")
+    os.makedirs(render_dir, exist_ok=True)
+    viz_path = os.path.join(render_dir, 'test_render')
+    plt.savefig(viz_path)
+    print(f"Visualization saved to {viz_path}")
+    plt.close()
 
-    optimized_pose = Localizer().localize(camera_image)
-    print(f"Final pose: {optimized_pose}")
+    # optimized_pose = Localizer().localize(camera_image)
+    # print(f"Final pose: {optimized_pose}")
 
     # try:
     #     optimized_pose = Localizer().localize(camera_image)
