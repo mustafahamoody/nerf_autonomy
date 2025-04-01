@@ -40,7 +40,7 @@ def detect_keypoints(image_path, model, device='cuda'):
     with torch.no_grad():
         output = model({'image': image_tensor})
 
-    print(f'----------------------------------------------{output}----------------------------------------------')
+    # print(f'----------------------------------------------{output}----------------------------------------------')
 
     # Extract keypoints, scores and descriptors
     keypoints = output['keypoints'][0].cpu().numpy()

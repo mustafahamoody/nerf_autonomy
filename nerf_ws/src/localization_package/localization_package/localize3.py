@@ -119,20 +119,36 @@ class Localizer():
         self.get_rays_fn = lambda pose: get_rays(pose, self.dataset.intrinsics, self.dataset.H, self.dataset.W)  # Function to Generate Render rays
 
 
-    def build_pose(self, camera_image, x=0.01, y=0.01, z=0.01, yaw=0.05): # OR call NeRF_Render
+    def build_pose(self, image_path, x=0.01, y=0.01, z=0.01, yaw=0.05): # OR call NeRF_Render
         # Preprocess Camera image 
+        camera_image = cv2.imread(image_path)
+        camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
         H, W, _ = camera_image.shape
         camera_image = (camera_image / 255).astype(np.float32)
         # Move tensor to CUDA and permute dimensions to match expected format
         camera_image_t = torch.tensor(camera_image, device='cuda').permute(2, 0, 1).unsqueeze(0)
 
         # Detect Image Keypoints
-        keypoints, scores, descriptors = get_keypoints(camera_image, weights_path='../SuperPoint/weights/superpoint_v6_from_tf.pth')
-        if keypoints.shape[0] == 0:
+        keypoints, scores, descriptors = get_keypoints(image_path, weights_path='../SuperPoint/weights/superpoint_v6_from_tf.pth')
+        if keypoints.shape == 0:
             print("No Features Found in Image")
             return None
-        
         print(keypoints)
+
+        keypoints=keypoints.astype(np.uint8)
+        # create meshgrid from the observed image
+        coords = np.asarray(np.stack(np.meshgrid(np.linspace(0, H - 1, H), np.linspace(0, W - 1, W)), -1), dtype=int)
+
+        # Create sampling mask for interest region sampling strategy and dilate it
+        interest_regions = np.zeros((H, W), dtype=np.uint8)
+        interest_regions[keypoints[:, 1], keypoints[:, 0]] = 1 
+        
+        interest_regions = cv2.dilate(interest_regions, np.ones((self.kernel_size, self.kernel_size), np.uint8),
+                                    iterations=self.dilate_iter)
+        interest_regions = np.argwhere(interest_regions > 0)
+
+
+        # Create optimizable (trainable) pose parameters -- with small non-zero values to avoid local minima
 
 
 
@@ -140,8 +156,7 @@ class Localizer():
 
 # ## Test
 image_path = "1.png"
-camera_image = cv2.imread("1.png")
-# camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
-# Localizer().build_pose(camera_image)
-weights_path = '../SuperPoint/weights/superpoint_v6_from_tf.pth'
-keypoints, scores, descriptors = get_keypoints(image_path, weights_path)
+
+Localizer().build_pose(image_path)
+# weights_path = '../SuperPoint/weights/superpoint_v6_from_tf.pth'
+# keypoints, scores, descriptors = get_keypoints(image_path, weights_path)
