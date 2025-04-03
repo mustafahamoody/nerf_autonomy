@@ -3,10 +3,9 @@ import cv2
 import numpy as np
 from pathlib import Path
 import os
-
-
 # Importing SuperPoint from superpoint_pytorch
 from src.localization_package.SuperPoint.superpoint_pytorch import SuperPoint
+
 
 def load_model(weights_path, device='cuda'):
     # Load superpoint model with pretrained weights
@@ -63,8 +62,8 @@ def visualize_keypoints(image_path, keypoints, save_image=True):
 
     # Save image to output path
     if save_image == True:
-        os.makedirs(os.path.join(os.getcwd(), "image_keypoints"), exist_ok=True)
-        output_path = os.path.join(os.getcwd(), "image_keypoints", os.path.basename(image_path))
+        # os.makedirs(os.path.join(os.getcwd(), "image_keypoints"), exist_ok=True)
+        output_path = os.path.join(os.getcwd(), "image_keypoints.png") #, os.path.basename(image_path))
         cv2.imwrite(output_path, image)
         
     return
@@ -85,12 +84,20 @@ def get_keypoints(image_path, weights_path='weights/superpoint_v6_from_tf.pth', 
     # Detect keypoints
     keypoints, scores, descriptors = detect_keypoints(image_path, model, device)
 
+    # Create a mask for keypoints to only keep points where score > 0.25
+    mask = scores > 0
+
+    # Filter keypoints, scores, and descriptors based on mask
+    keypoints = keypoints[mask]
+    scores = scores[mask]
+    descriptors= descriptors[mask]
+ 
     # Visualize keypoints
     visualize_keypoints(image_path, keypoints, save_image=save)
 
     return keypoints, scores, descriptors
 
-# if __name__ == "__main__":
-#     # Test
-#     image_path = '2.png'  # Replace with your image path
-#     keypoints, scores, descriptors = get_keypoints(image_path)
+if __name__ == "__main__":
+    # Test
+    image_path = '1.png'  # Replace with your image path
+    keypoints, scores, descriptors = get_keypoints(image_path)

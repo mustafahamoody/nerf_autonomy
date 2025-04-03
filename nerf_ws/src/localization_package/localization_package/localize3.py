@@ -69,65 +69,7 @@ class Localizer():
         self.stream = stream
         self.device = torch.device('cuda')
 
-        # Get config paths from environment variables with error checking
-        model_config_path = os.environ.get('MODEL_CONFIG_PATH')
-        trainer_config_path = os.environ.get('TRAINER_CONFIG_PATH')
-        
-        if not model_config_path:
-            raise EnvironmentError("MODEL_CONFIG_PATH environment variable must be set")
-        if not trainer_config_path:
-            raise EnvironmentError("TRAINER_CONFIG_PATH environment variable must be set")
-            
-        # Load configurations
-        try:
-            self.config_model = load_config(model_config_path)
-            self.config_trainer = load_config(trainer_config_path)
-
-        except Exception as e:
-            raise e
-        
-        # Initialize the NeRF model
-        self.model = NeRFNetwork(
-            encoding=self.config_model['model']['encoding'],
-            bound=self.config_model['model']['bound'],
-            cuda_ray=self.config_model['model']['cuda_ray'],
-            density_scale=self.config_model['model']['density_scale'],
-            min_near=self.config_model['model']['min_near'],
-            density_thresh=self.config_model['model']['density_thresh'],
-            bg_radius=self.config_model['model']['bg_radius'],
-        )
-        self.model.eval()  # Set the model to evaluation mode
-
-        self.metrics = [PSNRMeter(),]
-        self.criterion = torch.nn.MSELoss(reduction='none')
-
-        # Initialize the Trainer (load weights from a checkpoint)
-        self.trainer = Trainer(
-            'ngp',
-            opt=ModelOptions.opt(),
-            model=self.model,
-            device=self.device,
-            workspace=self.config_trainer['trainer']['workspace'],
-            criterion=self.criterion,
-            fp16=self.config_model['model']['fp16'],
-            metrics=self.metrics,
-            use_checkpoint=self.config_trainer['trainer']['use_checkpoint'],
-        )
-
-        self.dataset = NeRFDataset(ModelOptions.opt(), device=self.device, type='test')  # Importing dataset in order to get the same camera intrinsics as training    
-        self.render_fn = lambda rays_o, rays_d: self.model.render(rays_o, rays_d, staged=True, bg_color=1., perturb=False, **vars(ModelOptions.opt()))  # Function to Render Image
-        self.get_rays_fn = lambda pose: get_rays(pose, self.dataset.intrinsics, self.dataset.H, self.dataset.W)  # Function to Generate Render rays
-
-
     def build_pose(self, image_path, x=0.01, y=0.01, z=0.01, yaw=0.05): # OR call NeRF_Render
-        # Preprocess Camera image 
-        camera_image = cv2.imread(image_path)
-        camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
-        H, W, _ = camera_image.shape
-        camera_image = (camera_image / 255).astype(np.float32)
-        # Move tensor to CUDA and permute dimensions to match expected format
-        camera_image_t = torch.tensor(camera_image, device='cuda').permute(2, 0, 1).unsqueeze(0)
-
         # Detect Image Keypoints
         keypoints, scores, descriptors = get_keypoints(image_path, weights_path='../SuperPoint/weights/superpoint_v6_from_tf.pth')
         if keypoints.shape == 0:
@@ -136,17 +78,6 @@ class Localizer():
         print(keypoints)
 
         keypoints=keypoints.astype(np.uint8)
-        # create meshgrid from the observed image
-        coords = np.asarray(np.stack(np.meshgrid(np.linspace(0, H - 1, H), np.linspace(0, W - 1, W)), -1), dtype=int)
-
-        # Create sampling mask for interest region sampling strategy and dilate it
-        interest_regions = np.zeros((H, W), dtype=np.uint8)
-        interest_regions[keypoints[:, 1], keypoints[:, 0]] = 1 
-        
-        interest_regions = cv2.dilate(interest_regions, np.ones((self.kernel_size, self.kernel_size), np.uint8),
-                                    iterations=self.dilate_iter)
-        interest_regions = np.argwhere(interest_regions > 0)
-
 
         # Create optimizable (trainable) pose parameters -- with small non-zero values to avoid local minima
 
