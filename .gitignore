@@ -1,4 +1,8 @@
 /data/
+gazebo/
+gaz/
+gaz_thresh/
+workspace/
 render_viz/
 /build/
 /install/
