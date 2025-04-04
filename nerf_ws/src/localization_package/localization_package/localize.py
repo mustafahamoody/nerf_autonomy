@@ -55,7 +55,7 @@ def find_keypoints(camera_image, max_keypoints=10000, render=False):
 # Pose Coordinate Optimizer using NeRF
 class PoseOptimizer():
     def __init__(self, render_fn, get_rays_fn, learning_rate=0.01, n_iters=500, batch_size=2048, 
-                 kernel_size=3, dilate_iter=2, render_viz=False, fixed_z=0.0):
+                 kernel_size=3, dilate_iter=2, render=False, stream=False, fixed_z=0.0):
         """
         render_fn: function taking rays (origins, directions) and returning a dict with key 'image'
         get_rays_fn: function taking a 4x4 camera pose matrix and returning dict with 'rays_o' and 'rays_d'
@@ -72,8 +72,9 @@ class PoseOptimizer():
         self.batch_size = batch_size
         self.kernel_size = kernel_size
         self.dilate_iter = dilate_iter
-        self.render_viz = render_viz
-        self.fixed_z = fixed_z
+        self.render = render
+        self.stream = stream
+        # self.fixed_z = fixed_z
 
         self.optimizer_params = {
             'lr': learning_rate,
@@ -81,7 +82,7 @@ class PoseOptimizer():
         }
 
 
-    def estimate_pose(self, camera_image, x, y, z, yaw):
+    def estimate_pose(self, camera_image, x, y, z, roll, pitch, yaw):
         """
         camera_image: RGB image as a numpy array (range 0...255)
         Returns: (x, y, z) translation tuple, yaw (radians), and the loss history.
@@ -92,7 +93,7 @@ class PoseOptimizer():
         camera_image_t = torch.tensor(camera_image, device='cuda').permute(2, 0, 1).unsqueeze(0)
         
         # Detect Keypoints
-        keypoints, extras = find_keypoints(camera_image, render=self.render_viz)
+        keypoints, extras = find_keypoints(camera_image, render=self.render)
         if keypoints.shape[0] == 0:
             print("No Features Found in Image")
             return None
@@ -106,7 +107,7 @@ class PoseOptimizer():
         interest_idxs = np.argwhere(interest_mask > 0)
 
         # Create optimizable (trainable) pose parameters -- with small non-zero values to avoid local minima
-        pose_params = torch.tensor([x, y, z, yaw], device='cuda', requires_grad=True)
+        pose_params = torch.tensor([x, y, z, pitch, roll, yaw], device='cuda', requires_grad=True)
 
         # Use Adam optimizer for poses
         optimizer = torch.optim.Adam([pose_params], **self.optimizer_params)
@@ -125,9 +126,9 @@ class PoseOptimizer():
         # Tracking loss history
         losses = []
 
-        if self.render_viz:
-            # Create render_viz directory to store NeRF Renders
-            render_dir = os.path.join(os.getcwd(), "render_viz")
+        if self.render:
+            # Create nerf_renders directory to store NeRF Renders
+            render_dir = os.path.join(os.getcwd(), "nerf_renders")
             os.makedirs(render_dir, exist_ok=True)
 
         
@@ -136,17 +137,35 @@ class PoseOptimizer():
             optimizer.zero_grad()
 
             # Extract Parameters
-            x, y, z, yaw = pose_params[0], pose_params[1], pose_params[2], pose_params[3]
+            x, y, z, roll, pitch, yaw = pose_params[0], pose_params[1], pose_params[2], pose_params[3], pose_params[4], pose_params[5]
 
-            # Create rotation matrix for yaw
-            cos_y = torch.cos(yaw)
-            sin_y = torch.sin(yaw)
-            R = torch.zeros((3, 3), device='cuda')
-            R[0, 0] = cos_y
-            R[0, 1] = -sin_y
-            R[1, 0] = sin_y
-            R[1, 1] = cos_y
-            R[2, 2] = 1.0
+            cos_x, sin_x = torch.cos(pitch), torch.sin(pitch)
+            cos_y, sin_y = torch.cos(yaw), torch.sin(yaw)
+            cos_z, sin_z = torch.cos(roll), torch.sin(roll)
+
+           # Rotation matrix for roll
+            Rx = torch.tensor([
+                [1, 0, 0],
+                [0, cos_x, -sin_x],
+                [0, sin_x, cos_x]
+            ], device='cuda', dtype=torch.float32)
+
+           # Rotation matrix for pitch
+            Ry = torch.tensor([
+                [-cos_y, 0, sin_y],
+                [0, -1, 0],
+                [-sin_y, 0, cos_y]
+            ], device='cuda', dtype=torch.float32)
+
+           # Rotation matrix for yaw
+            Rz = torch.tensor([
+                [cos_z, -sin_z, 0],
+                [sin_z, cos_z, 0],
+                [0, 0, 1]
+            ], device='cuda', dtype=torch.float32)
+
+            # Combine Rotation Matrix
+            R = torch.mm(torch.mm(Rz, Ry), Rx)
 
             # Create translation vector
             t = torch.zeros((3, 1), device='cuda')
@@ -240,7 +259,7 @@ class PoseOptimizer():
                 # print(f"Gradients: {pose_params.grad}")
 
 
-            if self.render_viz:
+            if self.render:
                 # Render full image and save to render_viz folder for visualization
                 with torch.no_grad():
                     full_rays = self.get_rays(pose_matrix)
@@ -259,30 +278,32 @@ class PoseOptimizer():
                 plt.tight_layout()
 
                 # Save to file
-                viz_path = os.path.join(render_dir, f'localization_iter_{iter}.png')
-                viz_path = os.path.join(render_dir, f'localization_stream.png')
+                if self.stream:
+                    viz_path = os.path.join(render_dir, f'localization_stream.png')
+                else:
+                    viz_path = os.path.join(render_dir, f'localization_iter_{iter}.png')
                 plt.savefig(viz_path)
                 print(f"Visualization saved to {viz_path}")
                 plt.close()
 
 
         # Extract final values
-        x, y, z, yaw = [p.item() for p in pose_params]
+        x, y, z, roll, pitch, yaw = [p.item() for p in pose_params]
 
-        # Create final pose matrix
-        cos_y = np.cos(yaw)
-        sin_y = np.sin(yaw)
+        # # Create final pose matrix
+        # cos_y = np.cos(yaw)
+        # sin_y = np.sin(yaw)
         
-        final_pose = np.eye(4)
-        final_pose[0, 0] = -cos_y
-        final_pose[0, 1] = sin_y
-        final_pose[1, 0] = -sin_y
-        final_pose[1, 1] = cos_y
-        final_pose[0, 3] = x
-        final_pose[1, 3] = y
-        final_pose[2, 3] = z
+        # final_pose = np.eye(4)
+        # final_pose[0, 0] = -cos_y
+        # final_pose[0, 1] = sin_y
+        # final_pose[1, 0] = -sin_y
+        # final_pose[1, 1] = cos_y
+        # final_pose[0, 3] = x
+        # final_pose[1, 3] = y
+        # final_pose[2, 3] = z
 
-        return final_pose[:3, 3], yaw, losses
+        return (x, y, z), roll, pitch, yaw
     
 
 ########################### Load NERF Model Config. ###########################
@@ -368,26 +389,27 @@ class Localize():
         self.get_rays_fn = lambda pose: get_rays(pose, self.dataset.intrinsics, self.dataset.H, self.dataset.W)  # Function to Generate Render rays
 
 
-    def run(self, camera_image, x=1, y=1, z=1, yaw=0.5):
+    def run(self, camera_image, x=1, y=1, z=1, roll=0.05, pitch=0.05, yaw=0.05):
         optimizer = PoseOptimizer(self.render_fn, 
                                   self.get_rays_fn, 
-                                  learning_rate=2.0,
+                                  learning_rate=1e-2,
                                   n_iters=500,
                                   batch_size=2048,
-                                  render_viz=True)
+                                  render=True,
+                                  stream=True)
         
-        result = optimizer.estimate_pose(camera_image, x, y, z, yaw) # Run Pose Optimizer on Image
+        result = optimizer.estimate_pose(camera_image, x, y, z, roll, pitch, yaw) # Run Pose Optimizer on Image
         
         if result is not None:
-            final_translation, final_yaw, losses = result
+            final_translation, final_roll, final_pitch, final_yaw = result
             # final_translation is a tuple (x, y, z)
             print("Final translation (x, y, z):", final_translation)
-            print("Final yaw (radians):", final_yaw)
+            print("Final roll, pitch, yaw (radians):", final_roll, final_pitch, final_yaw)
 
       
 ################## TEST ##################
 # Load your sensor image (ensure it is in RGB).
-camera_image = cv2.imread("1.png")
+camera_image = cv2.imread("10.png")
 camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
 
 Localize().run(camera_image)
