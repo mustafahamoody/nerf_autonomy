@@ -14,7 +14,7 @@ video_fps = "10" # Frame extraction (per second) for video
 # --------------ENVIRONMENT SCALING------------
 # point1 = [0.3, 0.0, 0.0] # x, y, z coordinates of the first point
 # point2 = [0.7, 0.0, 0.0] # x, y, z coordinates of the second point
-real_world_distance = 5 # Real-world distance between the two points 
+# real_world_distance = 5 # Real-world distance between the two points 
 
 # ------------------------------------------
 

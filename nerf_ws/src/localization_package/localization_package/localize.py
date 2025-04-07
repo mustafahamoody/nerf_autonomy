@@ -15,7 +15,7 @@ from nerf_config.config.model_options import ModelOptions
 # ----------------------------------------------------------------------------------------
 
 def find_keypoints(camera_image, max_keypoints=10000, render=False):
-    # Extract keypoints using ORB (Oriented FAST and Rotated BRIEF).
+    # Extract keypoints using SIFT (Scale-Invariant Feature Transform).
     image = np.copy(camera_image)
 
     # Make sure image is correct datatype for processing
@@ -25,7 +25,7 @@ def find_keypoints(camera_image, max_keypoints=10000, render=False):
     # Convert to grayscale
     image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    # Create ORB detector
+    # Create SIFT detector
     orb = cv2.ORB_create(nfeatures=max_keypoints)
 
     # Find keypoints and descriptors
