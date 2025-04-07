@@ -1,13 +1,13 @@
 # Turning envirionment captures into NeRF model
 
-## Using env_creation.py -- Inside torch-ngp-Container
+## Using env_creation.py -- Inside torch_ngp_container
 
 1. Give your user access to the data folder
     ```
     nerf_autonomy$ sudo chown -R $UID $GID data
     ```
 2. Put your environment captures in a folder under the data folder  
-3. In the env_create.py file (under the torch-ngp-container folder), under DATA SETUP, set content_path = data/[Your capture folder name], and input_type = [ Capture Type: Image or Video]
+3. In the env_create.py file (under the torch_ngp_container folder), under DATA SETUP, set content_path = data/[Your capture folder name], and input_type = [ Capture Type: Image or Video]
 
 Note: Every time you are asked for the environment name, enter the name from set up **Don't add the _nerf**
 

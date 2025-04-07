@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'seg_package'
+package_name = 'segmentation_package'
 
 setup(
     name=package_name,
@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'seg_node = seg_package.seg_node:main'
+            'segmentation_node = segmentation_package.segmentation_node:main'
         ],
     },
 )

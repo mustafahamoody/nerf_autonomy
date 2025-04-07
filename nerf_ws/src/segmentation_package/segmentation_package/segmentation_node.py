@@ -5,38 +5,65 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 import math
+import yaml
+import os
 
 # ROS message imports
 from visualization_msgs.msg import Marker
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from std_msgs.msg import Header
 
+# Load configurations from YAML file
+def load_config(file_path):
+    """Load YAML configuration file with environment variable expansion."""
+    try:
+        with open(file_path, 'r') as file:
+            config = yaml.safe_load(file)
+
+        def expand_vars(item):
+            if isinstance(item, str):
+                return os.path.expandvars(item)
+            elif isinstance(item, dict):
+                return {key: expand_vars(value) for key, value in item.items()}
+            elif isinstance(item, list):
+                return [expand_vars(elem) for elem in item]
+            else:
+                return item
+
+        config = expand_vars(config)
+        return config
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Configuration file not found: {file_path}")
+    except yaml.YAMLError as e:
+        raise ValueError(f"Error parsing YAML configuration file: {e}")
+
+# Get config paths from environment variables with error checking
+occupancy_config_path = os.environ.get('OCCUPANCY_CONFIG_PATH')
+
+if not occupancy_config_path:
+    raise EnvironmentError("OCCUPANCY_CONFIG_PATH environment variable must be set")
+    
+# Load configurations
+try:
+    config_occupancy = load_config(occupancy_config_path)
+
+except Exception as e:
+    raise e
+
 class GroundSegmentationNode(Node):
     def __init__(self):
         super().__init__('ground_segmentation_node')
         
-        # Parameters (with default values)
-        self.declare_parameter('ground_lower', -1)
-        self.declare_parameter('ground_upper', -0.0)
-        self.declare_parameter('z_center', 0.1)
-        self.declare_parameter('z_band_thickness', 1.5)
-        self.declare_parameter('grid_resolution', 100)  # lateral resolution for x and y, and also z
-        self.declare_parameter('grid_min', -1.0)         # domain minimum for each axis
-        self.declare_parameter('grid_max', 1.0)          # domain maximum for each axis
-
-
         # Get parameter values
-        self.ground_lower = self.get_parameter('ground_lower').value
-        self.ground_upper = self.get_parameter('ground_upper').value
-        self.z_center = self.get_parameter('z_center').value
-        self.z_band_thickness = self.get_parameter('z_band_thickness').value
-        self.grid_res = int(self.get_parameter('grid_resolution').value)
-        self.grid_min = self.get_parameter('grid_min').value
-        self.grid_max = self.get_parameter('grid_max').value
-
-
-        # Calculate voxel size (assuming same resolution along all axes)
-        self.voxel_size = 0.02 # (self.grid_max - self.grid_min) / self.grid_res
+        self.ground_lower = float(config_occupancy['segmentation']['ground_lower'])
+        self.ground_upper = float(config_occupancy['segmentation']['ground_upper'])
+        self.z_center = float(config_occupancy['segmentation']['z_center'])
+        self.z_band_thickness = float(config_occupancy['segmentation']['z_band_thickness'])
+        self.grid_res = int(config_occupancy['segmentation']['grid_resolution'])
+        self.grid_min = float(config_occupancy['segmentation']['grid_min'])
+        self.grid_max = float(config_occupancy['segmentation']['grid_max'])
+        self.voxel_size = float(config_occupancy['segmentation']['grid_max'])
 
         # Publisher for the 2D occupancy grid
         self.occ_pub = self.create_publisher(OccupancyGrid, 'occupancy_grid_2d', 10)

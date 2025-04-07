@@ -7,7 +7,7 @@ import yaml
 # --------------DATA SETUP-------------
 input_type = "image"
 
-content_path = "data/training_env"
+content_path = "data/demo"
 
 video_fps = "10" # Frame extraction (per second) for video
 
@@ -17,7 +17,6 @@ video_fps = "10" # Frame extraction (per second) for video
 # real_world_distance = 5 # Real-world distance between the two points 
 
 # ------------------------------------------
-
 
 # Load configurations from YAML file
 def load_config(file_path):

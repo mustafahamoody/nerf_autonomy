@@ -90,6 +90,8 @@ RUN /bin/bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-in
 # Set environment variables for configuration file paths (if needed)
 ENV MODEL_CONFIG_PATH=${WORKSPACE}/nerf_config/model_config.yaml
 ENV TRAINER_CONFIG_PATH=${WORKSPACE}/nerf_config/trainer_config.yaml
+ENV OCCUPANCY_CONFIG_PATH=${WORKSPACE}/nerf_config/occupancy_config.yaml
+
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Set a fixed directory for Torch extensions and create it

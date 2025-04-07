@@ -1,8 +1,7 @@
 /data/
-render_viz/
-nerf_renders/
 /build/
 /install/
 /log/
 __pycache__/
 *.pyc
+/matches/

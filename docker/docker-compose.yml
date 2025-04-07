@@ -1,9 +1,9 @@
 
 services:
-  torch-ngp-container:
+  torch_ngp_container:
     build:
       context: ..
-      dockerfile: docker/torch_ngp.dockerfile
+      dockerfile: docker/torch_ngp_container.dockerfile
 
     runtime: nvidia
 
@@ -59,7 +59,7 @@ services:
         source ~/.bashrc &&
         ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
         ros2 run occupancy_package occupancy_node &
-        ros2 run seg_package seg_node &
+        ros2 run segmentation_package segmentation_node &
         ros2 run costmap_package costmap_node &
         ros2 run path_planner_package path_planner_node &
         ros2 run path_planner_package path_planner_service &

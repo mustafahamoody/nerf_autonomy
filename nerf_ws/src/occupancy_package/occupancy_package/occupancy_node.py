@@ -55,22 +55,27 @@ class OccupancyGridNode(Node):
         # Get config paths from environment variables with error checking
         model_config_path = os.environ.get('MODEL_CONFIG_PATH')
         trainer_config_path = os.environ.get('TRAINER_CONFIG_PATH')
+        occupancy_config_path = os.environ.get('OCCUPANCY_CONFIG_PATH')
+
         
         if not model_config_path:
             raise EnvironmentError("MODEL_CONFIG_PATH environment variable must be set")
         if not trainer_config_path:
             raise EnvironmentError("TRAINER_CONFIG_PATH environment variable must be set")
+        if not occupancy_config_path:
+            raise EnvironmentError("OCCUPANCY_CONFIG_PATH environment variable must be set")
             
         # Load configurations
         try:
             self.config_model = load_config(model_config_path)
-            self.config_trainer = load_config(trainer_config_path)
             self.get_logger().info(f"Loaded model config from: {model_config_path}")
+            self.config_trainer = load_config(trainer_config_path)
             self.get_logger().info(f"Loaded trainer config from: {trainer_config_path}")
+            self.config_occupancy = load_config(occupancy_config_path)
+            self.get_logger().info(f"Loaded occupancy config from: {occupancy_config_path}")
         except Exception as e:
             self.get_logger().error(f"Failed to load configurations: {e}")
             raise
-
 
         # Publisher for the occupancy grid (PointCloud2) -- for future use.
         self.pc_pub = self.create_publisher(PointCloud2, 'occupancy_grid', 10)
@@ -162,7 +167,7 @@ class OccupancyGridNode(Node):
         perform maxpooling to reduce the grid to 20x20x20, and publish a Marker.CUBE_LIST
         representing the occupied voxels.
         """
-        side = 200
+        side = int(self.config_occupancy['occupancy_grid']['side'])
         # Generate grid coordinates in the domain [-1,1]
         x_linspace = torch.linspace(-1, 1, side, device=self.device)
         y_linspace = torch.linspace(-1, 1, side, device=self.device)
@@ -180,7 +185,7 @@ class OccupancyGridNode(Node):
         kernel_size = 2  # This will reduce the grid to 20x20x20
         maxpool = torch.nn.MaxPool3d(kernel_size=kernel_size)
         sigma_pooled = maxpool(sigma_grid_unsq)[0, 0]  # Shape: [20, 20, 20]
-        threshold = 15  # Threshold for occupied voxels
+        threshold = int(self.config_occupancy['occupancy_grid']['density_threshold'])
         occupied = sigma_pooled > threshold  # Boolean tensor
 
         # Compute voxel size: original domain length (2) divided by 20 = 0.1 per voxel.

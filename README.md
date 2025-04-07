@@ -1,7 +1,7 @@
 # nerf_autonomy
 The Complete Repository for Autonomous Robot Navigation using Neural Radiance Fields (NeRFs). With quick and easy setup using Docker. 
 
-Use ***torch-ngp-container*** to transform captured photos or a video of an environment into an accurately scaled digital model. \
+Use ***torch_ngp_container*** to transform captured photos or a video of an environment into an accurately scaled digital model. \
 Then, use ***nerf_ws*** to set up collision-free path planning and controls using ROS2 for real-time autonomous navigation in the environment, with your robot.
 
 ## nerf_autonomy Setup
@@ -23,7 +23,7 @@ $ cd nerf_autonomy
 ```
 
 Build and Start the Docker Containers **using Docker Compose**. Make sure the containers run as detached (-d flag) \
-*This process may take a while depending on your system (15 - 30 mins +)* 
+*This process may take a while depending on your system (15 - 30+ mins)* 
 ```
 nerf_autonomy$ cd docker
 nerf_autonomy/docker$ docker compose up -d # This will build and start both containers
@@ -39,8 +39,8 @@ $ sudo usermod -aG docker $USER
 
 Enter the running container:
 ```
-# To enter torch-ngp-container: For environment creation
-nerf_autonomy/docker$ docker compose exec torch-ngp-container bash
+# To enter torch_ngp_container: For environment creation
+nerf_autonomy/docker$ docker compose exec torch_ngp_container bash
 ```
 ```
 # To enter nerf_ws: For starting ROS2 navigation nodes
@@ -86,8 +86,8 @@ Run the nerf_autonomy demo and ensure everything is working
   nerf_autonomy$ sudo chown -R $UID $GID data
   ```
 4. Move it into nerf_autonomy/data
-5. Open env_create.py (in the torch-ngp-container folder) and make sure that under **DATA SETUP, content_path = "data/demo"** and **input_type = "image"**
-6. Start the containers and enter torch-ngp-container
+5. Open env_create.py (in the torch_ngp_container folder) and make sure that under **DATA SETUP, content_path = "data/demo"** and **input_type = "image"**
+6. Start the containers and enter torch_ngp_container
 7. To create the demo NeRF Environment run:
 8. ```
    python env-create.py
