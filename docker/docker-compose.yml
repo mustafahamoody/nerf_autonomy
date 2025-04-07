@@ -1,6 +1,6 @@
 
 services:
-  torch-ngp:
+  torch-ngp-container:
     build:
       context: ..
       dockerfile: docker/torch_ngp.dockerfile
@@ -26,7 +26,7 @@ services:
     network_mode: host
     
   
-  ros_packages:
+  nerf_ws:
     build:
       context: ..
       dockerfile: docker/nerf_ws.dockerfile
