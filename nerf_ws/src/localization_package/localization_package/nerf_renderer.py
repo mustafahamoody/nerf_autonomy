@@ -1,6 +1,6 @@
 import torch
 import yaml
-import cv2
+import imageio.v2 as imageio
 
 # NeRF Functions
 from nerf_config.libs.nerf.utils import *
@@ -62,6 +62,8 @@ class NeRF_Renderer():
         except Exception as e:
             raise e
         
+        self.device = torch.device('cuda')
+        
         # Initialize the NeRF model
         self.model = NeRFNetwork(
             encoding=self.config_model['model']['encoding'],
@@ -96,26 +98,24 @@ class NeRF_Renderer():
         # function taking rays from rays_fn (origins, directions) and returning a dict with key 'image' -- Render Image
         self.render_fn = lambda rays_o, rays_d: self.model.render(rays_o, rays_d, staged=True, bg_color=1., perturb=False, **vars(ModelOptions.opt()))
 
-        self.device = torch.device('cuda')
 
-
-    def nerf_image(self, pose_matrix):
-
+    def nerf_image(self, pose_matrix, image_height, image_width):
         # Get full (NeRF) image rays from camera position specifiled by pose matrix
         full_rays = self.get_rays_fn(pose_matrix)
         # Use full image for optimization
-        nerf_image = self.render_fn(full_rays["rays_o"], full_rays["rays_d"])
+        output = self.render_fn(full_rays["rays_o"], full_rays["rays_d"])
+        nerf_image = output["image"].reshape(image_height, image_width, 3) # Shapes NeRF image to match robot camera image
 
         # Create nerf_renders directory to store NeRF Renders        
-        save_path = os.path.join(os.getcwd(), "localizer_images", "nerf_image.png")
+        save_path = os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")
 
         # Convert NeRF tensor to np array for saving
         # The 'render_fn' returns an image with the shape (H, W, 3) for RGB images
-        nerf_image_np = nerf_image['image'].cpu().detach().numpy()
+        nerf_image_np = nerf_image.cpu().detach().numpy()
         
         # Convert the image to [0, 255] range and uint8 format for saving
         nerf_image_np = (nerf_image_np * 255).astype(np.uint8)
         
         # Use OpenCV to save the image as PNG at the specified path
-        cv2.imwrite(save_path, nerf_image_np)
-        print(f"NeRF image saved at {save_path}")
+        imageio.imwrite(save_path, nerf_image_np)
+        print(f"NeRF render saved at {save_path}")
