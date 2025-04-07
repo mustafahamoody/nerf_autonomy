@@ -1,7 +1,7 @@
 # nerf_autonomy
 The Complete Repository for Autonomous Robot Navigation using Neural Radiance Fields (NeRFs). With quick and easy setup using Docker. 
 
-Use ***torch-ngp-container*** to transform captured photos or a video of an environment into an accurately scaled digital model. \
+Use ***torch_ngp_container*** to transform captured photos or a video of an environment into an accurately scaled digital model. \
 Then, use ***nerf_ws*** to set up collision-free path planning and controls using ROS2 for real-time autonomous navigation in the environment, with your robot.
 
 ## nerf_autonomy Setup
