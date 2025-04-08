@@ -3,8 +3,8 @@ occupancy_grid:
   density_threshold: 15 # Threshold for occupied voxels
 
 segmentation:
-  ground_lower: -1.0
-  ground_upper: 0.0
+  ground_lower: -1
+  ground_upper: -0.0
   z_center: 0.1
   z_band_thickness: 1.5
   grid_resolution: 100   # lateral resolution for x and y, and also z

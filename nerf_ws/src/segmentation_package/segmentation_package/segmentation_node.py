@@ -56,14 +56,15 @@ class GroundSegmentationNode(Node):
         super().__init__('ground_segmentation_node')
         
         # Get parameter values
-        self.ground_lower = float(config_occupancy['segmentation']['ground_lower'])
-        self.ground_upper = float(config_occupancy['segmentation']['ground_upper'])
-        self.z_center = float(config_occupancy['segmentation']['z_center'])
-        self.z_band_thickness = float(config_occupancy['segmentation']['z_band_thickness'])
+        self.ground_lower = config_occupancy['segmentation']['ground_lower']
+        self.ground_upper = config_occupancy['segmentation']['ground_upper']
+        self.z_center = config_occupancy['segmentation']['z_center']
+        self.z_band_thickness = config_occupancy['segmentation']['z_band_thickness']
         self.grid_res = int(config_occupancy['segmentation']['grid_resolution'])
-        self.grid_min = float(config_occupancy['segmentation']['grid_min'])
-        self.grid_max = float(config_occupancy['segmentation']['grid_max'])
-        self.voxel_size = float(config_occupancy['segmentation']['grid_max'])
+        self.grid_min = config_occupancy['segmentation']['grid_min']
+        self.grid_max = config_occupancy['segmentation']['grid_max']
+        self.voxel_size = config_occupancy['segmentation']['voxel_size']
+
 
         # Publisher for the 2D occupancy grid
         self.occ_pub = self.create_publisher(OccupancyGrid, 'occupancy_grid_2d', 10)

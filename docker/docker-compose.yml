@@ -60,7 +60,7 @@ services:
         ros2 launch foxglove_bridge foxglove_bridge_launch.xml &
         ros2 run occupancy_package occupancy_node &
         ros2 run segmentation_package segmentation_node &
-        ros2 run costmap_package costmap_node &
+        # ros2 run costmap_package costmap_node &
         ros2 run path_planner_package path_planner_node &
         ros2 run path_planner_package path_planner_service &
         
