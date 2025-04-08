@@ -86,7 +86,7 @@ class Localizer():
         # render NeRF image bassed on pose_matrix
         NeRF_Renderer().nerf_image(pose_matrix, image_height, image_width)
         
-        return pose_matrix
+        return pose_matrix-
 
     def keypoint_matcher(pose_matrix=None, keypoint_threshold=0.005, match_threshold=0.2):
         # Run Superpoint to detect keypoints on nerf render and robot image, then use SuperGlue for keypoint matching 
@@ -131,14 +131,17 @@ class Localizer():
         
         
 # Test
-robot_image_path = "localizer_images/robot_image.png"
+robot_image_path = "localizer_images/nerf_size.png"
 robot_image = imageio.imread(robot_image_path)
 
 image_height, image_width, _ = robot_image.shape
+print(f'-----------------------------{image_height, image_width}------------------------------------------')
 
-Localizer().build_pose_and_render(x=0.00, y=0.00, z=0.00, roll=0.00, pitch=0.00, yaw=0.00, image_height=image_height, image_width=image_width)
+Localizer().build_pose_and_render(x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05, image_height=480, image_width=640)
 Localizer().keypoint_matcher()
 
 
 # Localizer().build_pose(image_path)
+
+
 

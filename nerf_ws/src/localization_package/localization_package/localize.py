@@ -87,7 +87,7 @@ class PoseOptimizer():
         camera_image: RGB image as a numpy array (range 0...255)
         Returns: (x, y, z) translation tuple, yaw (radians), and the loss history.
         """
-        H, W, _ = camera_image.shape
+        H, W = 480, 640
         camera_image = (camera_image / 255).astype(np.float32)
         # Move tensor to CUDA and permute dimensions to match expected format
         camera_image_t = torch.tensor(camera_image, device='cuda').permute(2, 0, 1).unsqueeze(0)
@@ -98,8 +98,15 @@ class PoseOptimizer():
             print("No Features Found in Image")
             return None
         
+        # Filter out keypoints that are out of bounds
+        valid_mask = (keypoints[:, 0] >= 0) & (keypoints[:, 0] < W) & \
+                    (keypoints[:, 1] >= 0) & (keypoints[:, 1] < H)
+        keypoints = keypoints[valid_mask]  # Only keep valid ones
+        
         # Create mask from keypoints and dilate it
         interest_mask = np.zeros((H, W), dtype=np.uint8)
+        print(f'----------------{interest_mask.shape}----------------')
+        print(f'----------------{keypoints[:, 0]}----------------')
         interest_mask[keypoints[:, 1], keypoints[:, 0]] = 1 
         
         interest_mask = cv2.dilate(interest_mask, np.ones((self.kernel_size, self.kernel_size), np.uint8),
@@ -259,7 +266,7 @@ class PoseOptimizer():
                 # print(f"Gradients: {pose_params.grad}")
 
 
-            if self.render:
+            if self.render and iter % 50 == 0 or self.render and iter == 1:
                 # Render full image and save to render_viz folder for visualization
                 with torch.no_grad():
                     full_rays = self.get_rays(pose_matrix)
@@ -389,14 +396,14 @@ class Localize():
         self.get_rays_fn = lambda pose: get_rays(pose, self.dataset.intrinsics, self.dataset.H, self.dataset.W)  # Function to Generate Render rays
 
 
-    def run(self, camera_image, x=1, y=1, z=1, roll=0.05, pitch=0.05, yaw=0.05):
+    def run(self, camera_image, x=1.5, y=-0.45, z=0.05, roll=0, pitch=0, yaw=3.14):
         optimizer = PoseOptimizer(self.render_fn, 
                                   self.get_rays_fn, 
                                   learning_rate=1e-2,
                                   n_iters=500,
                                   batch_size=2048,
                                   render=True,
-                                  stream=True)
+                                  stream=False)
         
         result = optimizer.estimate_pose(camera_image, x, y, z, roll, pitch, yaw) # Run Pose Optimizer on Image
         
@@ -409,7 +416,7 @@ class Localize():
       
 ################## TEST ##################
 # Load your sensor image (ensure it is in RGB).
-camera_image = cv2.imread("10.png")
+camera_image = cv2.imread("localizer_images/robot_image.png")
 camera_image = cv2.cvtColor(camera_image, cv2.COLOR_BGR2RGB)
 
 Localize().run(camera_image)
