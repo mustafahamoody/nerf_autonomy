@@ -6,6 +6,7 @@ import yaml
 import os
 import subprocess
 from pathlib import Path
+import cv2
 
 
 # Function to render image from NeRF NeRF bassed on camera position specifiled by pose matrix
@@ -123,20 +124,20 @@ class Localizer():
             print("No Keypoints Matched with Enough Confidance for Localization")
             return
 
-        matched_kpts0 = keypoints0[valid_matches]  # Get matched keypoints in image 0
-        matched_kpts1 = keypoints1[matches[valid_matches]]  # Get corresponding keypoints in image 1
+        matched_keypoints0 = keypoints0[valid_matches]  # Get matched keypoints in image 0
+        matched_keypoints1 = keypoints1[matches[valid_matches]]  # Get corresponding keypoints in image 1
 
-        matched_kpts0 = torch.tensor(matched_kpts0).to(self.device)
-        matched_kpts1 = torch.tensor(matched_kpts1).to(self.device)
+        # Print Results
+        print(f"Valid Matches: {len(matched_keypoints0)}")
+        # print("Image 0 Keypoints:", matched_keypoints0)
+        # print("Image 1 Keypoints:", matched_keypoints1)
 
-        # Print some results
-        print(f"Valid Matches: {len(matched_kpts0)}")
-        # print("Image 0 Keypoints:", matched_kpts0)
-        # print("Image 1 Keypoints:", matched_kpts1)
+        matched_keypoints0 = torch.tensor(matched_keypoints0, requires_grad=True, dtype=torch.float32, device=self.device)  # Robot image matched keypoints
+        matched_keypoints1 = torch.tensor(matched_keypoints1, requires_grad=True, dtype=torch.float32, device=self.device)  # NeRF image matched keypoints
 
-        return matched_kpts0, matched_kpts1
+        return matched_keypoints0, matched_keypoints1
 
-    def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05):
+    def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05, lambda_blur = 1e6):
 
          # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima
         pose_parameters = torch.tensor([x, y, z, pitch, roll, yaw], device='cuda', requires_grad=True)
@@ -158,12 +159,47 @@ class Localizer():
                 print("Loss Value Below Threshold: Pose Optimized")
                 break
 
+            optimizer.zero_grad()
+
+            # Build pose matrix from pose_parameters
             pose_matrix = self.build_pose_matrix(pose_parameters)
 
+            # Run Keypoint Detection and matching and return matched image keypoint coordinates 
             matched_keypoints0, matched_keypoints1 = self.keypoint_matcher(pose_matrix)
 
-            break
-            # keypoints_loss = torch.nn.functional.MSELoss() 
+            # Calculate loss using Euclidian Distance b/w matched keypoints
+            loss_keypoints = torch.sum(torch.norm(matched_keypoints0 - matched_keypoints1, dim =1) ** 2)
+            
+            # Print Loss
+            print(loss_keypoints)
+
+            # Add Loss Peniltly for Blury NeRF Image
+            nerf_render_path = os.path.join(Path.cwd(), "localizer_images", "nerf_render.png")
+            nerf_render = cv2.imread(nerf_render_path, cv2.IMREAD_GRAYSCALE)
+            laplacian_var = cv2.Laplacian(nerf_render, cv2.CV_64F).var() # Calculate image blur using Laplacian variance
+            print(laplacian_var)
+
+            # Inverse Normalization of variance
+            blur_penalty = lambda_blur * (1 / (1 + laplacian_var))
+            print(blur_penalty)
+
+            # Calculate total 
+            loss = loss_keypoints + blur_penalty
+            print('Loss:', loss)
+
+            if pose_parameters.grad is None:
+                print("ALERT: pose_parameters has NO gradient!")
+            else:
+                print(f"GREEN: pose_parameters has gradient: {pose_parameters.grad}")
+
+            loss.backward()
+            optimizer.step()
+
+            # Print Progress
+            print(f"--------------------------Iteration {iter}, Loss: {loss.item()}--------------------------")
+            print(f"Current params: {pose_parameters.data}")
+            # print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
+            # print(f"Gradients: {pose_params.grad}")
             
             iter += 1
 
