@@ -1,6 +1,7 @@
 import torch
+from torchvision import transforms
 import yaml
-import imageio.v2 as imageio
+import cv2
 
 # NeRF Functions
 from nerf_config.libs.nerf.utils import *
@@ -38,13 +39,8 @@ def load_config(file_path):
 
 ########################### END Load NERF Model Config. ###########################
 
-class NeRF_Renderer():
-    def __init__(self):
-        """
-        get_rays_fn: function taking a 4x4 camera pose matrix and returning dict with 'rays_o' and 'rays_d'
-        render_fn: function taking rays (origins, directions) and returning a dict with key 'image'
-        """
-
+class NeRFRenderer():
+    def __init__(self, save_image=True):
         # Get config paths from environment variables with error checking
         model_config_path = os.environ.get('MODEL_CONFIG_PATH')
         trainer_config_path = os.environ.get('TRAINER_CONFIG_PATH')
@@ -92,30 +88,50 @@ class NeRF_Renderer():
             use_checkpoint=self.config_trainer['trainer']['use_checkpoint'],
         )
 
+        
+        self.save_image = save_image
+        self.grayscale_fn = transforms.Grayscale()
+
+        """
+        get_rays_fn: function taking a 4x4 camera pose matrix and returning dict with 'rays_o' and 'rays_d'
+        render_fn: function taking rays (origins, directions) and returning a dict with key 'image'
+        """
         self.dataset = NeRFDataset(ModelOptions.opt(), device=self.device, type='test')  # Importing dataset in order to get the same camera intrinsics as training    
         # function taking a 4x4 camera pose matrix and returning dict with 'rays_o' and 'rays_d'
         self.get_rays_fn = lambda pose: get_rays(pose, self.dataset.intrinsics, self.dataset.H, self.dataset.W)  # Function to Generate Render rays
         # function taking rays from rays_fn (origins, directions) and returning a dict with key 'image' -- Render Image
         self.render_fn = lambda rays_o, rays_d: self.model.render(rays_o, rays_d, staged=True, bg_color=1., perturb=False, **vars(ModelOptions.opt()))
 
-
-    def nerf_image(self, pose_matrix, image_height, image_width):
+    def nerf_image(self, pose_matrix, image_height=480, image_width=640):
         # Get full (NeRF) image rays from camera position specifiled by pose matrix
         full_rays = self.get_rays_fn(pose_matrix)
-        # Use full image for optimization
+
+        # Render full image for optimization
         output = self.render_fn(full_rays["rays_o"], full_rays["rays_d"])
-        nerf_image = output["image"].reshape(image_height, image_width, 3) # Shapes NeRF image to match robot camera image
 
-        # Create nerf_renders directory to store NeRF Renders        
-        save_path = os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")
+        # Reshape NeRF output image to match robot camera image (H, W, 3)
+        nerf_image = output["image"].reshape(image_height, image_width, 3)
 
-        # Convert NeRF tensor to np array for saving
-        # The 'render_fn' returns an image with the shape (H, W, 3) for RGB images
-        nerf_image_np = nerf_image.cpu().detach().numpy()
+        # Convert from RGB to Grayscale using torchvision transforms as expected by SuperPoint
+        nerf_image_gray = self.grayscale_fn(nerf_image.permute(2, 0, 1))
+
+        # Add batch + channel dimensions as expected by SuperPoint
+        nerf_render = nerf_image_gray.unsqueeze(0)  # Shape: (1, 1, H, W)
         
-        # Convert the image to [0, 255] range and uint8 format for saving
-        nerf_image_np = (nerf_image_np * 255).astype(np.uint8)
+        if self.save_image == True:
+            # Create nerf_renders directory to store NeRF Renders        
+            save_path = os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")
+
+            # Convert NeRF tensor to np array for saving
+            # The 'render_fn' returns an image with the shape (H, W, 3) for RGB images
+            nerf_render_np = nerf_render_np = (nerf_image_gray.permute(1, 2, 0).cpu().detach().numpy() * 255).astype(np.uint8)
+
+            # Use open-cv to save the grayscale render as PNG at the specified path
+            cv2.imwrite(save_path, nerf_render_np)
+            print(f"NeRF render saved at {save_path}")
+
+
+        # print('-----------------NeRF Render for SuperPoint/SuperGlue-----------------')
+        # print(nerf_render)
         
-        # Use OpenCV to save the image as PNG at the specified path
-        imageio.imwrite(save_path, nerf_image_np)
-        print(f"NeRF render saved at {save_path}")
+        return nerf_render
