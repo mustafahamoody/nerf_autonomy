@@ -45,7 +45,7 @@ def read_image(path, resize, device):
 
 # --------------------------- Keypoint Matcher ---------------------------
 class KeypointMatcher():
-    def __init__(self, robot_image_path, viz=True, keypoint_threshold=0.005, match_threshold=0.70, resize=[640, 480]):
+    def __init__(self, robot_image_path, viz=True, keypoint_threshold=0.005, match_threshold=0.80, resize=[640, 480]):
         # Initialize Superpoint and Superglue models and Loads Robot Image
         
         self.device = torch.device('cuda')
@@ -78,16 +78,13 @@ class KeypointMatcher():
     def detect_and_match_keypoints(self, nerf_render_tensor):
         # Run SuperPoint, SuperGlue
         output = self.matching({'image0': self.robot_image_tensor, 'image1': nerf_render_tensor})
-        # print(output)
 
         # Format keypoint data into dictionary
         keypoint_data = {k: v[0] for k, v in output.items()}
-        print(keypoint_data)
 
         # Extract keypoints from the robot, nerf images
         keypoints0 = keypoint_data["keypoints0"]  # Shape: [N0, 2] (x, y) keypoints in image 0
         keypoints1 = keypoint_data["keypoints1"]  # Shape: [N1, 2] (x, y) keypoints in image 1
-        
 
         # Extract match indices (-1 means no match)
         matches = keypoint_data["matches0"]  # Shape: [N0] - each index points to keypoints1 or -1 if no match
@@ -95,46 +92,46 @@ class KeypointMatcher():
         # Filter out invalid matches (where matches[i] == -1)
         valid_matches = matches > -1
 
-        # print('------------VALID MATCHES------------')
-        # print(valid_matches)
-
         if torch.sum(valid_matches) == 0:
             print("No Keypoints Matched with Enough Confidance for Localization")
-            return
+            return None, None
 
         matched_keypoints0 = keypoints0[valid_matches]  # Get matched keypoints in image 0
         matched_keypoints1 = keypoints1[matches[valid_matches]]  # Get corresponding keypoints in image 1
 
         # Print Results
-        print(f"Valid Matches: {len(matched_keypoints0)}")
-        print("Image 0 Keypoints:", matched_keypoints0)
-        print("Image 1 Keypoints:", matched_keypoints1)
-
+        print(f"Valid Keypoint Matches: {len(matched_keypoints0)}")
+        # print("Image 0 Keypoints:", matched_keypoints0)
+        # print("Image 1 Keypoints:", matched_keypoints1)
 
         if self.viz == True:
-            # Visualize the matches.
-            match_confidance = keypoint_data['matching_scores0'][valid_matches].cpu().detach().numpy() # Get confidance of matches for visualization
+            with torch.no_grad():
+                # Visualize the matches.
+                match_confidance = keypoint_data['matching_scores0'][valid_matches].cpu().detach().numpy() # Get confidance of matches for visualization
 
-            color = cm.jet(match_confidance)
-            text = [
-                'SuperGlue',
-                'Keypoints: {}:{}'.format(len(keypoints0), len(keypoints1)),
-                'Matches: {}'.format(len(matches)),
-            ]
+                color = cm.jet(match_confidance)
+                text = [
+                    'SuperGlue',
+                    'Keypoints: {}:{}'.format(len(keypoints0), len(keypoints1)),
+                    'Matches: {}'.format(len(matches)),
+                ]
 
-            # Display extra parameter info.
-            k_thresh = self.matching.superpoint.config['keypoint_threshold']
-            m_thresh = self.matching.superglue.config['match_threshold']
-            small_text = [
-                'Keypoint Threshold: {:.4f}'.format(k_thresh),
-                'Match Threshold: {:.2f}'.format(m_thresh),
-            ]
+                # Display extra parameter info.
+                k_thresh = self.matching.superpoint.config['keypoint_threshold']
+                m_thresh = self.matching.superglue.config['match_threshold']
+                small_text = [
+                    'Keypoint Threshold: {:.4f}'.format(k_thresh),
+                    'Match Threshold: {:.2f}'.format(m_thresh),
+                ]
 
-            nerf_render = cv2.imread(str(os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")), cv2.IMREAD_GRAYSCALE)
-            viz_path = os.path.join(os.getcwd(), "localizer_images", "nerf_robot_keypoint_matches.png")
+                nerf_render = cv2.imread(str(os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")), cv2.IMREAD_GRAYSCALE)
+                viz_path = os.path.join(os.getcwd(), "localizer_images", "nerf_robot_keypoint_matches.png")
 
-            make_matching_plot(
-                image0=self.robot_image, image1=nerf_render, kpts0=keypoints0.cpu().detach().numpy(), kpts1=keypoints1.cpu().detach().numpy(), 
-                mkpts0=matched_keypoints0.cpu().detach().numpy(), mkpts1=matched_keypoints1.cpu().detach().numpy(), color=color,
-                text=text, path=viz_path, show_keypoints=True, opencv_title='Matches', small_text=small_text)
+                make_matching_plot(
+                    image0=self.robot_image, image1=nerf_render, kpts0=keypoints0.cpu().detach().numpy(), kpts1=keypoints1.cpu().detach().numpy(), 
+                    mkpts0=matched_keypoints0.cpu().detach().numpy(), mkpts1=matched_keypoints1.cpu().detach().numpy(), color=color,
+                    text=text, path=viz_path, show_keypoints=True, opencv_title='Matches', small_text=small_text)
+        
+        return matched_keypoints0, matched_keypoints1
+            
 
