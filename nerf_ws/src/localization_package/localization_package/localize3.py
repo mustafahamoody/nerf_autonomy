@@ -8,9 +8,12 @@ import subprocess
 from pathlib import Path
 import cv2
 
+# Class to render NeRF Image and return tensor 
+from nerf_renderer import NeRFRenderer
 
-# Function to render image from NeRF NeRF bassed on camera position specifiled by pose matrix
-from nerf_renderer import NeRF_Renderer
+# Class to run keypoint matching and detection
+from keypoint_matcher import KeypointMatcher
+
 
 # Utility to check autograd graph
 # from torchviz import make_dot
@@ -18,7 +21,7 @@ from nerf_renderer import NeRF_Renderer
 ########################### Load NERF Model Config. ###########################
 
 class Localizer():
-    def __init__(self, learning_rate=0.01, max_iters=1000, render=False, stream=False):
+    def __init__(self, robot_image_path=None, learning_rate=0.01, max_iters=1000, render=False, stream=False):
         """
         learning_rate: learning rate for optimization
         max_iters: maximum number of optimization iterations
@@ -33,6 +36,17 @@ class Localizer():
         self.render = render
         self.stream = stream
         self.device = torch.device('cuda')
+        self.image_size = [640, 480]
+
+        # Path to robot image
+        robot_image_path = os.path.join(os.getcwd(), "localizer_images", "robot_image.png") if robot_image_path == None else robot_image_path
+
+        # Initalize NeRF Renderer class to query NeRF
+        self.nerf_render = NeRFRenderer(save_image=render)
+
+        # Initialize Keypoint Matcher class
+        self.keypoint_matcher = KeypointMatcher(robot_image_path, resize=self.image_size, viz=render)
+
 
     def build_pose_matrix(self, pose_parameters):
         # Build Pose Matrix from pose_parameters
@@ -83,68 +97,15 @@ class Localizer():
         
         return pose_matrix
 
-    def keypoint_matcher(self, pose_matrix=None, keypoint_threshold=0.005, match_threshold=0.20, image_height=480, image_width=640):
 
-        # Check Pose Matrix Shape
-        if pose_matrix.shape != (1, 4, 4):
-            print("ERROR: Invalid Pose Matrix -- Incorrect Shape")
+    def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05):
 
-        # Render NeRF image bassed on pose_matrix and save in localizer images folder
-        NeRF_Renderer().nerf_image(pose_matrix, image_height, image_width)
-
-        # Run Superpoint to detect keypoints on nerf render and robot image, then use SuperGlue for keypoint matching 
-        superglue_matcher_path = os.path.join(Path.cwd().parent, "SuperGlue", "match_pairs.py")
-        input_dir = os.path.join(Path.cwd(), "localizer_images")
-        input_pairs = os.path.join(input_dir, "image_pair.txt")
-        output_dir = os.path.join(Path.cwd(), "matches")
-        subprocess.run(["python3", superglue_matcher_path,
-                        "--input_pairs", input_pairs,
-                        "--input_dir", input_dir,
-                        "--output_dir", output_dir,
-                        "--keypoint_threshold", str(keypoint_threshold),
-                        "--match_threshold", str(match_threshold),
-                        "--viz"
-                        ])
-
-
-        keypoint_data = np.load(os.path.join(output_dir, "nerf_render_robot_image_matches.npz"))
-        # print('----------------------------', np.sum(keypoint_data['keypoints0']>-1), '----------------------------')
-        
-        # Extract keypoints from the first and second images
-        keypoints0 = keypoint_data["keypoints0"]  # Shape: [N0, 2] (x, y) keypoints in image 0
-        keypoints1 = keypoint_data["keypoints1"]  # Shape: [N1, 2] (x, y) keypoints in image 1
-
-        # Extract match indices (-1 means no match)
-        matches = keypoint_data["matches"]  # Shape: [N0] - each index points to keypoints1 or -1 if no match
-
-        # Filter out invalid matches (where matches[i] == -1)
-        valid_matches = matches > -1
-
-        if np.sum(valid_matches) == 0:
-            print("No Keypoints Matched with Enough Confidance for Localization")
-            return
-
-        matched_keypoints0 = keypoints0[valid_matches]  # Get matched keypoints in image 0
-        matched_keypoints1 = keypoints1[matches[valid_matches]]  # Get corresponding keypoints in image 1
-
-        # Print Results
-        print(f"Valid Matches: {len(matched_keypoints0)}")
-        # print("Image 0 Keypoints:", matched_keypoints0)
-        # print("Image 1 Keypoints:", matched_keypoints1)
-
-        matched_keypoints0 = torch.tensor(matched_keypoints0, requires_grad=True, dtype=torch.float32, device=self.device)  # Robot image matched keypoints
-        matched_keypoints1 = torch.tensor(matched_keypoints1, requires_grad=True, dtype=torch.float32, device=self.device)  # NeRF image matched keypoints
-
-        return matched_keypoints0, matched_keypoints1
-
-    def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05, lambda_blur = 1e6):
-
-         # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima
+        # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima, if no best-guess pose available
         pose_parameters = torch.tensor([x, y, z, pitch, roll, yaw], device='cuda', requires_grad=True)
 
         # Initialize optimizer
         optimizer = torch.optim.SGD([pose_parameters], lr=self.learning_rate, weight_decay=1e-3) # Use Classic gradient descent with L2 Regularization (weight decay)
-        
+
         if self.render:
             # Create nerf_renders directory to store NeRF Renders
             optimizer_render_dir = os.path.join(os.getcwd(), "optimizer_renders")
@@ -163,44 +124,57 @@ class Localizer():
 
             # Build pose matrix from pose_parameters
             pose_matrix = self.build_pose_matrix(pose_parameters)
+            # print('Pose Matrix Requires Grad', pose_matrix.requires_grad)
 
-            # Run Keypoint Detection and matching and return matched image keypoint coordinates 
-            matched_keypoints0, matched_keypoints1 = self.keypoint_matcher(pose_matrix)
+            # Make sure pose matrix shape is valid
+            if pose_matrix.shape != (1, 4, 4):
+                print("ERROR: Invalid Pose Matrix -- Incorrect Shape")
+                return
+
+            # Render NeRF image bassed on pose_matrix and return as tensor
+            nerf_render_tensor = self.nerf_render.nerf_image(pose_matrix, image_width=self.image_size[0], image_height=self.image_size[1])
+            # print('NeRF Render Requires Grad', nerf_render_tensor.requires_grad)
+
+            # Run keypoint detection with SuperPoint and keypoint matching with SuperGlue and return matched keypoint coordinates (robot, nerf image respectivly)
+            matched_keypoints0, matched_keypoints1 = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor)
+
+            if None in [matched_keypoints0, matched_keypoints1]:
+                # UPDATE POSE PARAMS ----------------
+                continue
 
             # Calculate loss using Euclidian Distance b/w matched keypoints
             loss_keypoints = torch.sum(torch.norm(matched_keypoints0 - matched_keypoints1, dim =1) ** 2)
             
-            # Print Loss
-            print(loss_keypoints)
+            # # Print Loss
+            # print("Loss from Keypoint Distance:", loss_keypoints)
 
-            # Add Loss Peniltly for Blury NeRF Image
-            nerf_render_path = os.path.join(Path.cwd(), "localizer_images", "nerf_render.png")
-            nerf_render = cv2.imread(nerf_render_path, cv2.IMREAD_GRAYSCALE)
-            laplacian_var = cv2.Laplacian(nerf_render, cv2.CV_64F).var() # Calculate image blur using Laplacian variance
-            print(laplacian_var)
+            # # Add Loss Peniltly for Blury NeRF Image ------ Need to implement with torch
+            # nerf_render_path = os.path.join(Path.cwd(), "localizer_images", "nerf_render.png")
+            # nerf_render = cv2.imread(nerf_render_path, cv2.IMREAD_GRAYSCALE)
+            # laplacian_var = cv2.Laplacian(nerf_render, cv2.CV_64F).var() # Calculate image blur using Laplacian variance
+            # print("NeRF Render Laplacian Variance:", laplacian_var)
+            # print("Render is", "sharp" if laplacian_var >= 200 else "blury") 
 
-            # Inverse Normalization of variance
-            blur_penalty = lambda_blur * (1 / (1 + laplacian_var))
-            print(blur_penalty)
+            # # Inverse Normalization of variance
+            # blur_penalty = lambda_blur * (1 / (1 + laplacian_var))
+            # print(blur_penalty)
+            # print("Loss Penelty : ", loss_keypoints)
 
-            # Calculate total 
-            loss = loss_keypoints + blur_penalty
-            print('Loss:', loss)
+            # # Calculate total 
+            # loss = loss_keypoints + laplacian_var
+            # print('Pre Optimization Loss Tensor:', loss)
 
-            if pose_parameters.grad is None:
-                print("ALERT: pose_parameters has NO gradient!")
-            else:
-                print(f"GREEN: pose_parameters has gradient: {pose_parameters.grad}")
+            # print('Pose Parameters Requires Grad', pose_parameters.requires_grad)
 
-            loss.backward()
+            loss_keypoints.backward()
+            # loss.backward()
             optimizer.step()
 
             # Print Progress
-            print(f"--------------------------Iteration {iter}, Loss: {loss.item()}--------------------------")
-            print(f"Current params: {pose_parameters.data}")
+            print(f"--------------------------Iteration {iter}, Loss:{loss_keypoints.item()}--------------------------")
+            print(f"Current Pose Parameters: {pose_parameters.data}")
             # print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
-            # print(f"Gradients: {pose_params.grad}")
-            
+            print(f"Gradients: {pose_parameters.grad}")
             iter += 1
 
 
@@ -209,7 +183,7 @@ class Localizer():
         
         
 # Test
-Localizer().localize_pose(x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05)
+Localizer(render=True, learning_rate=100, max_iters=100).localize_pose(x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05)
 
 
 # Localizer().build_pose(image_path)
