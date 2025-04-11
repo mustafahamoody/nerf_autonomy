@@ -103,50 +103,64 @@ class Localizer():
         # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima, if no best-guess pose available
         pose_parameters = torch.tensor([x, y, z, pitch, roll, yaw], device='cuda', requires_grad=True)
 
-        # Initialize optimizer
-        optimizer = torch.optim.SGD([pose_parameters], lr=self.learning_rate, weight_decay=1e-3) # Use Classic gradient descent with L2 Regularization (weight decay)
+        # Use Adam optimizer for better handling of different scales
+        optimizer = torch.optim.Adam([pose_parameters], lr=0.01)
+
+        # Add learning rate scheduler
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, 
+            mode='min', 
+            factor=0.5, 
+            patience=3, 
+            verbose=True, 
+            min_lr=1e-6
+        )
+        
+        # For loss smoothing
+        loss_history = []
+        smoothing_window = 3
+        best_loss = float('inf')
+        best_params = pose_parameters.clone().detach()
 
         if self.render:
             # Create nerf_renders directory to store NeRF Renders
             optimizer_render_dir = os.path.join(os.getcwd(), "optimizer_renders")
             os.makedirs(optimizer_render_dir, exist_ok=True)
 
+
         # Optimization loop -- Keep optimizing until loss is below threshold or max iterations reached
         iter = 0
-        loss_value = np.inf
         while iter < self.max_iters:
-
-            if loss_value < self.loss_threshold:
-                print("Loss Value Below Threshold: Pose Optimized")
-                break
-
             optimizer.zero_grad()
 
             # Build pose matrix from pose_parameters
             pose_matrix = self.build_pose_matrix(pose_parameters)
             # print('Pose Matrix Requires Grad', pose_matrix.requires_grad)
 
-            # Make sure pose matrix shape is valid
-            if pose_matrix.shape != (1, 4, 4):
-                print("ERROR: Invalid Pose Matrix -- Incorrect Shape")
-                return
 
             # Render NeRF image bassed on pose_matrix and return as tensor
-            nerf_render_tensor = self.nerf_render.nerf_image(pose_matrix, image_width=self.image_size[0], image_height=self.image_size[1])
+            nerf_render_tensor = self.nerf_render.nerf_image(pose_matrix, 
+                                                            image_width=self.image_size[0], 
+                                                            image_height=self.image_size[1])
             # print('NeRF Render Requires Grad', nerf_render_tensor.requires_grad)
+
 
             # Run keypoint detection with SuperPoint and keypoint matching with SuperGlue and return matched keypoint coordinates (robot, nerf image respectivly)
             matched_keypoints0, matched_keypoints1 = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor)
 
-            if None in [matched_keypoints0, matched_keypoints1]:
-                # UPDATE POSE PARAMS ----------------
-                continue
+            # Modify pose and skip itteration if no keypoints matched
+            if None in [matched_keypoints0, matched_keypoints1] or len(matched_keypoints0) == 0:
+                        print("No keypoint matches found - skipping iteration")
+                        # Small random perturbation to parameters to escape local minimum
+                        with torch.no_grad():
+                            pose_parameters.data += torch.randn_like(pose_parameters) * 0.01
+                        iter += 1
+                        continue
 
-            # Calculate loss using Euclidian Distance b/w matched keypoints
-            loss_keypoints = torch.sum(torch.norm(matched_keypoints0 - matched_keypoints1, dim =1) ** 2)
-            
-            # # Print Loss
-            # print("Loss from Keypoint Distance:", loss_keypoints)
+            # Calculate normalized loss: Euclidian Distance between matched keypoints / number of keypoint matches matches (for consistancy)
+            # If not divided by # keypoints: More keypoints (desired for matched pose) = heigher loss
+            num_matches = matched_keypoints0.shape[0]
+            loss_keypoints = torch.sum(torch.norm(matched_keypoints0 - matched_keypoints1, dim=1) ** 2) / max(1, num_matches)
 
             # # Add Loss Peniltly for Blury NeRF Image ------ Need to implement with torch
             # nerf_render_path = os.path.join(Path.cwd(), "localizer_images", "nerf_render.png")
@@ -160,28 +174,69 @@ class Localizer():
             # print(blur_penalty)
             # print("Loss Penelty : ", loss_keypoints)
 
-            # # Calculate total 
+            # # Calculate total loss
             # loss = loss_keypoints + laplacian_var
             # print('Pre Optimization Loss Tensor:', loss)
 
-            # print('Pose Parameters Requires Grad', pose_parameters.requires_grad)
+            # Update loss history for smoothing
+            current_loss = loss_keypoints.item()
+            loss_history.append(current_loss)
+            if len(loss_history) > smoothing_window:
+                loss_history.pop(0)
 
+            smoothed_loss = sum(loss_history) / len(loss_history)
+
+            # Track best parameters
+            if current_loss < best_loss:
+                best_loss = current_loss
+                best_params = pose_parameters.clone().detach()
+
+            # Check for convergence
+            if smoothed_loss < self.loss_threshold:
+                print(f"Loss below threshold ({smoothed_loss} < {self.loss_threshold}): Pose optimized")
+                pose_parameters.data.copy_(best_params)
+                break
+
+
+            # Backward pass
             loss_keypoints.backward()
-            # loss.backward()
             optimizer.step()
 
-            # Print Progress
-            print(f"--------------------------Iteration {iter}, Loss:{loss_keypoints.item()}--------------------------")
+            # Gradient diagnostics
+            if pose_parameters.grad is not None:
+                grad_mag = pose_parameters.grad.abs().mean().item()
+                print(f"Gradient magnitude: {grad_mag:.10f}")
+            
+                 # Scale up tiny gradients if needed, to ensure meaningful updates
+                if grad_mag < 1e-6:
+                    scale_factor = 1e-6 / max(grad_mag, 1e-10)
+                    pose_parameters.grad.mul_(scale_factor)
+                    print(f"Scaling gradients by {scale_factor:.6f}")
+
+                # Clip large gradients to ensure smooth optimization process
+                torch.nn.utils.clip_grad_norm_([pose_parameters], max_norm=1.0)
+
+            # Print progress
+            print(f"--------------------------Iteration {iter}, Loss:{current_loss:.4f} (Smoothed: {smoothed_loss:.4f})--------------------------")
             print(f"Current Pose Parameters: {pose_parameters.data}")
-            # print(f"Current Learning rate: {scheduler.get_last_lr()[0]}")
-            print(f"Gradients: {pose_parameters.grad}")
+            print(f"Gradients: {pose_parameters.grad if pose_parameters.grad is not None else 'None'}")
+
+
+            # Update parameters
+            optimizer.step()
+        
+            # Update learning rate based on smoothed loss
+            if len(loss_history) == smoothing_window:
+                scheduler.step(smoothed_loss)
+        
             iter += 1
+    
+        # Return best found parameters
+        pose_parameters.data.copy_(best_params)
+        return pose_parameters.detach().cpu().numpy()
 
 
 
-
-        
-        
 # Test
 Localizer(render=True, learning_rate=100, max_iters=100).localize_pose(x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05)
 
