@@ -53,6 +53,7 @@ class Localizer():
 
     def build_pose_matrix(self, pose_parameters):
         x, y, z, roll, pitch, yaw = pose_parameters[0], pose_parameters[1], pose_parameters[2], pose_parameters[3], pose_parameters[4], pose_parameters[5]
+        x, y, z, roll, pitch, yaw = -x, y, -z, roll, -pitch, yaw  # Adjust values to make Right, Up, Forward positive
 
         # Calculate trig values
         cos_roll, sin_roll = torch.cos(roll), torch.sin(roll)
@@ -101,7 +102,7 @@ class Localizer():
     def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05):
 
         # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima, if no best-guess pose available
-        pose_parameters = torch.tensor([x, y, z, pitch, roll, yaw], device='cuda', requires_grad=True)
+        pose_parameters = torch.tensor([x, y, z, roll, yaw, pitch], device='cuda', requires_grad=True)
 
         # Use Adam optimizer for better handling of different scales
         optimizer = torch.optim.Adam([pose_parameters], lr=0.01)
@@ -240,7 +241,7 @@ class Localizer():
 
 # Test -- ROTATIONS BROKEN. Yaw controlls roll. Pitch dosen't work. NO YAW
 Localizer(render=True, learning_rate=100, max_iters=100, keypoint_threshold=0.005, match_threshold=0.80, min_match=1
-          ).localize_pose(x=0.1, y=0.1, z=0.1, roll=0.00, pitch=0.00, yaw=0.00)
+          ).localize_pose(x=0.00, y=0.00, z=-1.40, roll=0.00, pitch=0.00, yaw=0.00)
 
 
 # Localizer().build_pose(image_path)
