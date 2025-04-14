@@ -21,7 +21,7 @@ from keypoint_matcher import KeypointMatcher
 ########################### Load NERF Model Config. ###########################
 
 class Localizer():
-    def __init__(self, robot_image_path=None, learning_rate=0.01, max_iters=1000, render=False, stream=False):
+    def __init__(self, robot_image_path=None, learning_rate=0.01, max_iters=1000, keypoint_threshold=0.005, match_threshold=0.80, min_match=5, render=False, stream=False):
         """
         learning_rate: learning rate for optimization
         max_iters: maximum number of optimization iterations
@@ -45,55 +45,55 @@ class Localizer():
         self.nerf_render = NeRFRenderer(save_image=render)
 
         # Initialize Keypoint Matcher class
-        self.keypoint_matcher = KeypointMatcher(robot_image_path, resize=self.image_size, viz=render)
+        self.keypoint_threshold = keypoint_threshold
+        self.match_threshold = match_threshold
+        self.min_match = min_match
+        self.keypoint_matcher = KeypointMatcher(robot_image_path, resize=self.image_size, viz=render, keypoint_threshold=self.keypoint_threshold, match_threshold=self.match_threshold)
 
 
     def build_pose_matrix(self, pose_parameters):
-        # Build Pose Matrix from pose_parameters
-        # Extract Parameters
         x, y, z, roll, pitch, yaw = pose_parameters[0], pose_parameters[1], pose_parameters[2], pose_parameters[3], pose_parameters[4], pose_parameters[5]
 
-        cos_x, sin_x = torch.cos(pitch), torch.sin(pitch)
-        cos_y, sin_y = torch.cos(yaw), torch.sin(yaw)
-        cos_z, sin_z = torch.cos(roll), torch.sin(roll)
+        # Calculate trig values
+        cos_roll, sin_roll = torch.cos(roll), torch.sin(roll)
+        cos_pitch, sin_pitch = torch.cos(pitch), torch.sin(pitch)
+        cos_yaw, sin_yaw = torch.cos(yaw), torch.sin(yaw)
 
-        # Rotation matrix for roll
-        Rx = torch.tensor([
-            [1, 0, 0],
-            [0, cos_x, -sin_x],
-            [0, sin_x, cos_x]
-        ], device=self.device, dtype=torch.float32)
+        # Create rotation matrices while preserving gradients
+        Rz = torch.zeros((3, 3), device='cuda', dtype=torch.float32)
+        Rz[0, 0] = 1.0
+        Rz[1, 1] = cos_yaw
+        Rz[1, 2] = -sin_yaw
+        Rz[2, 1] = sin_yaw
+        Rz[2, 2] = cos_yaw
 
-        # Rotation matrix for pitch
-        Ry = torch.tensor([
-            [-cos_y, 0, sin_y],
-            [0, -1, 0],
-            [-sin_y, 0, cos_y]
-        ], device=self.device, dtype=torch.float32)
+        Ry = torch.zeros((3, 3), device='cuda', dtype=torch.float32)
+        Ry[0, 0] = -cos_pitch
+        Ry[0, 2] = sin_pitch
+        Ry[1, 1] = -1.0
+        Ry[2, 0] = -sin_pitch
+        Ry[2, 2] = -cos_pitch
 
-        # Rotation matrix for yaw
-        Rz = torch.tensor([
-            [cos_z, -sin_z, 0],
-            [sin_z, cos_z, 0],
-            [0, 0, 1]
-        ], device=self.device, dtype=torch.float32)
+        Rx = torch.zeros((3, 3), device='cuda', dtype=torch.float32)
+        Rx[0, 0] = cos_roll
+        Rx[0, 1] = -sin_roll
+        Rx[1, 0] = sin_roll
+        Rx[1, 1] = cos_roll
+        Rx[2, 2] = 1.0
 
-        # Combine Rotation Matrix
-        R = torch.mm(torch.mm(Rz, Ry), Rx)
+        # Matrix multiplication while preserving gradients
+        R = torch.matmul(torch.matmul(Rz, Ry), Rx)
 
-        # Create translation vector
-        t = torch.zeros((3, 1), device=self.device)
+        # Create translation part
+        t = torch.zeros((3, 1), device='cuda', dtype=torch.float32)
         t[0, 0] = x
         t[1, 0] = y
         t[2, 0] = z
 
-        # Combine rotation matrix and translation vector (top 3x4 part)
+        # Create transformation matrix
         top_rows = torch.cat([R, t], dim=1)
-        
-        # Add homogeneous (bottom) row
-        bottom_row = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device=self.device)
-        # Combine all into pose matrix
-        pose_matrix = torch.cat([top_rows, bottom_row], dim=0).unsqueeze(0) # Add batch dim
+        bottom_row = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device='cuda')
+        pose_matrix = torch.cat([top_rows, bottom_row], dim=0).unsqueeze(0)
         
         return pose_matrix
 
@@ -141,19 +141,21 @@ class Localizer():
             # Render NeRF image bassed on pose_matrix and return as tensor
             nerf_render_tensor = self.nerf_render.nerf_image(pose_matrix, 
                                                             image_width=self.image_size[0], 
-                                                            image_height=self.image_size[1])
+                                                            image_height=self.image_size[1], 
+                                                            iter=iter)
             # print('NeRF Render Requires Grad', nerf_render_tensor.requires_grad)
-
+            exit()
 
             # Run keypoint detection with SuperPoint and keypoint matching with SuperGlue and return matched keypoint coordinates (robot, nerf image respectivly)
-            matched_keypoints0, matched_keypoints1 = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor)
+            matched_keypoints0, matched_keypoints1, robot_image_tensor = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor, iter)
+
 
             # Modify pose and skip itteration if no keypoints matched
             if None in [matched_keypoints0, matched_keypoints1] or len(matched_keypoints0) == 0:
                         print("No keypoint matches found - skipping iteration")
                         # Small random perturbation to parameters to escape local minimum
                         with torch.no_grad():
-                            pose_parameters.data += torch.randn_like(pose_parameters) * 0.01
+                            pose_parameters.data += torch.randn_like(pose_parameters) * 0.05
                         iter += 1
                         continue
 
@@ -221,7 +223,6 @@ class Localizer():
             print(f"Current Pose Parameters: {pose_parameters.data}")
             print(f"Gradients: {pose_parameters.grad if pose_parameters.grad is not None else 'None'}")
 
-
             # Update parameters
             optimizer.step()
         
@@ -237,8 +238,9 @@ class Localizer():
 
 
 
-# Test
-Localizer(render=True, learning_rate=100, max_iters=100).localize_pose(x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05)
+# Test -- ROTATIONS BROKEN. Yaw controlls roll. Pitch dosen't work. NO YAW
+Localizer(render=True, learning_rate=100, max_iters=100, keypoint_threshold=0.005, match_threshold=0.80, min_match=1
+          ).localize_pose(x=0.1, y=0.1, z=0.1, roll=0.00, pitch=0.00, yaw=0.00)
 
 
 # Localizer().build_pose(image_path)

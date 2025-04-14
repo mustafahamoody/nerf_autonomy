@@ -26,10 +26,10 @@ def find_keypoints(camera_image, max_keypoints=10000, render=False):
     image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
     # Create SIFT detector
-    orb = cv2.ORB_create(nfeatures=max_keypoints)
+    sift = cv2.SIFT_create(nfeatures=max_keypoints)
 
     # Find keypoints and descriptors
-    keypoints, descriptors = orb.detectAndCompute(image_gray, None)
+    keypoints, descriptors = sift.detectAndCompute(image_gray, None)
     
     if render:
         # Draw keypoints on image
@@ -230,7 +230,7 @@ class PoseOptimizer():
             reg_loss = reg_factor * torch.sum(pose_params**2)
             total_loss = loss + reg_loss
 
-            # Backpropagate
+            # Backpropagate: Determine Gradients
             total_loss.backward()
 
             # Apply a more aggressive update for one step -- Every 50 iterations

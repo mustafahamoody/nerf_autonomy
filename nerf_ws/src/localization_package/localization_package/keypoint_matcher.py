@@ -45,7 +45,7 @@ def read_image(path, resize, device):
 
 # --------------------------- Keypoint Matcher ---------------------------
 class KeypointMatcher():
-    def __init__(self, robot_image_path, viz=True, keypoint_threshold=0.005, match_threshold=0.80, resize=[640, 480]):
+    def __init__(self, robot_image_path, viz=True, keypoint_threshold=0.005, match_threshold=0.80, min_match=5, resize=[640, 480]):
         # Initialize Superpoint and Superglue models and Loads Robot Image
         
         self.device = torch.device('cuda')
@@ -73,9 +73,10 @@ class KeypointMatcher():
             return
         
         self.robot_image, self.robot_image_tensor = read_image(robot_image_path, resize, self.device)
+        self.min_match = min_match
 
 
-    def detect_and_match_keypoints(self, nerf_render_tensor):
+    def detect_and_match_keypoints(self, nerf_render_tensor, iter):
         # Run SuperPoint, SuperGlue
         output = self.matching({'image0': self.robot_image_tensor, 'image1': nerf_render_tensor})
 
@@ -92,9 +93,9 @@ class KeypointMatcher():
         # Filter out invalid matches (where matches[i] == -1)
         valid_matches = matches > -1
 
-        if torch.sum(valid_matches) == 0:
-            print("No Keypoints Matched with Enough Confidance for Localization")
-            return None, None
+        if torch.sum(valid_matches) < self.min_match:
+            print("Not Enough Keypoints Matched with Enough Confidance for Localization")
+            return None, None, self.robot_image_tensor
 
         matched_keypoints0 = keypoints0[valid_matches]  # Get matched keypoints in image 0
         matched_keypoints1 = keypoints1[matches[valid_matches]]  # Get corresponding keypoints in image 1
@@ -113,7 +114,7 @@ class KeypointMatcher():
                 text = [
                     'SuperGlue',
                     'Keypoints: {}:{}'.format(len(keypoints0), len(keypoints1)),
-                    'Matches: {}'.format(len(matches)),
+                    'Matches: {}'.format(len(matched_keypoints0)),
                 ]
 
                 # Display extra parameter info.
@@ -132,6 +133,6 @@ class KeypointMatcher():
                     mkpts0=matched_keypoints0.cpu().detach().numpy(), mkpts1=matched_keypoints1.cpu().detach().numpy(), color=color,
                     text=text, path=viz_path, show_keypoints=True, opencv_title='Matches', small_text=small_text)
         
-        return matched_keypoints0, matched_keypoints1
+        return matched_keypoints0, matched_keypoints1, self.robot_image_tensor
             
 

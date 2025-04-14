@@ -120,7 +120,7 @@ class NeRFRenderer():
         return result
 
 
-    def nerf_image(self, pose_matrix, image_height=480, image_width=640):
+    def nerf_image(self, pose_matrix, image_height=480, image_width=640, iter=0):
         # Get full (NeRF) image rays from camera position specifiled by pose matrix
         full_rays = self.get_rays_fn(pose_matrix)
 
