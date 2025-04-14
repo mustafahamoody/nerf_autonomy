@@ -21,7 +21,7 @@ from keypoint_matcher import KeypointMatcher
 ########################### Load NERF Model Config. ###########################
 
 class Localizer():
-    def __init__(self, robot_image_path=None, learning_rate=0.01, max_iters=1000, keypoint_threshold=0.005, match_threshold=0.80, min_match=5, render=False, stream=False):
+    def __init__(self, robot_image_path=None, learning_rate=0.01, max_iters=1000, keypoint_threshold=0.005, match_threshold=0.80, min_matches=5, render=False, stream=False):
         """
         learning_rate: learning rate for optimization
         max_iters: maximum number of optimization iterations
@@ -45,14 +45,11 @@ class Localizer():
         self.nerf_render = NeRFRenderer(save_image=render)
 
         # Initialize Keypoint Matcher class
-        self.keypoint_threshold = keypoint_threshold
-        self.match_threshold = match_threshold
-        self.min_match = min_match
-        self.keypoint_matcher = KeypointMatcher(robot_image_path, resize=self.image_size, viz=render, keypoint_threshold=self.keypoint_threshold, match_threshold=self.match_threshold)
+        self.keypoint_matcher = KeypointMatcher(robot_image_path, resize=self.image_size, viz=render, keypoint_threshold=keypoint_threshold, match_threshold=match_threshold, min_matches=min_matches)
 
 
     def build_pose_matrix(self, pose_parameters):
-        x, y, z, roll, pitch, yaw = pose_parameters[0], pose_parameters[1], pose_parameters[2], pose_parameters[3], pose_parameters[4], pose_parameters[5]
+        x, y, z, roll, pitch, yaw = pose_parameters[0], pose_parameters[1], pose_parameters[2], pose_parameters[3], pose_parameters[5], pose_parameters[4]
         x, y, z, roll, pitch, yaw = -x, y, -z, roll, -pitch, yaw  # Adjust values to make Right, Up, Forward positive
 
         # Calculate trig values
@@ -102,7 +99,7 @@ class Localizer():
     def localize_pose(self, x=0.1, y=0.1, z=0.1, roll=0.05, pitch=0.05, yaw=0.05):
 
         # Create optimizable pose parameters to query NeRF -- Start at small non-zero values to avoid local minima, if no best-guess pose available
-        pose_parameters = torch.tensor([x, y, z, roll, yaw, pitch], device='cuda', requires_grad=True)
+        pose_parameters = torch.tensor([x, y, z, roll, pitch, yaw], device='cuda', requires_grad=True)
 
         # Use Adam optimizer for better handling of different scales
         optimizer = torch.optim.Adam([pose_parameters], lr=0.01)
@@ -145,10 +142,10 @@ class Localizer():
                                                             image_height=self.image_size[1], 
                                                             iter=iter)
             # print('NeRF Render Requires Grad', nerf_render_tensor.requires_grad)
-            exit()
 
+            print(f"------------------------------Iteration {iter}------------------------------")
             # Run keypoint detection with SuperPoint and keypoint matching with SuperGlue and return matched keypoint coordinates (robot, nerf image respectivly)
-            matched_keypoints0, matched_keypoints1, robot_image_tensor = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor, iter)
+            matched_keypoints0, matched_keypoints1 = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor, iter)
 
 
             # Modify pose and skip itteration if no keypoints matched
@@ -203,7 +200,6 @@ class Localizer():
 
             # Backward pass
             loss_keypoints.backward()
-            optimizer.step()
 
             # Gradient diagnostics
             if pose_parameters.grad is not None:
@@ -220,7 +216,7 @@ class Localizer():
                 torch.nn.utils.clip_grad_norm_([pose_parameters], max_norm=1.0)
 
             # Print progress
-            print(f"--------------------------Iteration {iter}, Loss:{current_loss:.4f} (Smoothed: {smoothed_loss:.4f})--------------------------")
+            print(f"----Loss:{current_loss:.4f} (Smoothed: {smoothed_loss:.4f})----")
             print(f"Current Pose Parameters: {pose_parameters.data}")
             print(f"Gradients: {pose_parameters.grad if pose_parameters.grad is not None else 'None'}")
 
@@ -239,12 +235,6 @@ class Localizer():
 
 
 
-# Test -- ROTATIONS BROKEN. Yaw controlls roll. Pitch dosen't work. NO YAW
-Localizer(render=True, learning_rate=100, max_iters=100, keypoint_threshold=0.005, match_threshold=0.80, min_match=1
-          ).localize_pose(x=0.00, y=0.00, z=-1.40, roll=0.00, pitch=0.00, yaw=0.00)
-
-
-# Localizer().build_pose(image_path)
-
-
-
+# Test
+Localizer(render=True, learning_rate=100, max_iters=100, keypoint_threshold=0.005, match_threshold=0.80, min_matches=2
+          ).localize_pose(x=-1.00, y=0.05, z=-1.90, roll=0.00, pitch=0.00, yaw=0.00)
