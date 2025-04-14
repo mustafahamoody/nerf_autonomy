@@ -131,6 +131,7 @@ class Localizer():
         while iter < self.max_iters:
             optimizer.zero_grad()
 
+            print(f"------------------------------Iteration {iter}------------------------------")
             # Build pose matrix from pose_parameters
             pose_matrix = self.build_pose_matrix(pose_parameters)
             # print('Pose Matrix Requires Grad', pose_matrix.requires_grad)
@@ -143,7 +144,6 @@ class Localizer():
                                                             iter=iter)
             # print('NeRF Render Requires Grad', nerf_render_tensor.requires_grad)
 
-            print(f"------------------------------Iteration {iter}------------------------------")
             # Run keypoint detection with SuperPoint and keypoint matching with SuperGlue and return matched keypoint coordinates (robot, nerf image respectivly)
             matched_keypoints0, matched_keypoints1 = self.keypoint_matcher.detect_and_match_keypoints(nerf_render_tensor, iter)
 

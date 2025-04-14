@@ -136,7 +136,7 @@ class NeRFRenderer():
         # Add batch + channel dimensions as expected by SuperPoint
         nerf_render = nerf_image_gray.unsqueeze(0)  # Shape: (1, 1, H, W)
         
-        if self.save_image == True and iter % 50 == 0:
+        if self.save_image == True and iter % 10 == 0:
             # Create nerf_renders directory to store NeRF Renders        
             save_path = os.path.join(os.getcwd(), "localizer_images", "nerf_render.png")
 

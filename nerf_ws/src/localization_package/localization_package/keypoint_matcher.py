@@ -105,7 +105,7 @@ class KeypointMatcher():
         # print("Image 0 Keypoints:", matched_keypoints0)
         # print("Image 1 Keypoints:", matched_keypoints1)
 
-        if self.viz == True and iter % 50 == 0:
+        if self.viz == True and iter % 10 == 0:
             with torch.no_grad():
                 # Visualize the matches.
                 match_confidance = keypoint_data['matching_scores0'][valid_matches].cpu().detach().numpy() # Get confidance of matches for visualization
